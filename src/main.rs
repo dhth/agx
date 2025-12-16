@@ -1,5 +1,6 @@
 mod app;
 mod env;
+mod telemetry;
 mod tools;
 
 #[tokio::main]

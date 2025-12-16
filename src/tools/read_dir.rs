@@ -3,15 +3,16 @@ use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tracing::{Level, instrument};
 
-#[derive(serde::Serialize)]
+#[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum EntryKind {
     File,
     Dir,
 }
 
-#[derive(serde::Serialize)]
+#[derive(Debug, serde::Serialize)]
 pub struct DirEntry {
     pub name: String,
     pub kind: EntryKind,
@@ -19,7 +20,7 @@ pub struct DirEntry {
     pub size: Option<u64>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct ReadDirArgs {
     path: String,
 }
@@ -64,6 +65,7 @@ impl Tool for ReadDir {
         }
     }
 
+    #[instrument(level = Level::TRACE, name = "tool-call: read_dir", ret, err(level = Level::ERROR), skip(self))]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         println!(
             "{}",
