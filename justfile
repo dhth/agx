@@ -52,6 +52,9 @@ review *FLAGS:
 test:
     cargo test
 
+tail-logs:
+    tail -n 100 ~/.local/state/agx/agx.log
+
 all:
     cargo check --all-targets
     cargo fmt --all

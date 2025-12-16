@@ -17,6 +17,9 @@ const BANNER: &str = include_str!("assets/logo.txt");
 const SYSTEM_PROMPT: &str = include_str!("assets/system-prompt.txt");
 
 pub async fn run() -> anyhow::Result<()> {
+    let xdg = etcetera::choose_base_strategy().context("couldn't determine your home directory")?;
+    crate::telemetry::setup(&xdg).context("couldn't set up logging")?;
+
     let provider = get_env_var("PROVIDER")?;
     let api_key = get_env_var("API_KEY")?;
     let model_name = get_env_var("MODEL_NAME")?;
