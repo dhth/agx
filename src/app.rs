@@ -1,5 +1,5 @@
 use crate::env::{get_env_var, get_optional_env_var};
-use crate::tools::{ReadDir, ReadFile};
+use crate::tools::{CreateFile, EditFile, ReadDir, ReadFile};
 use anyhow::Context;
 use colored::Colorize;
 use rig::agent::Agent;
@@ -36,8 +36,10 @@ pub async fn run() -> anyhow::Result<()> {
             let agent = client
                 .agent(model_name)
                 .preamble(SYSTEM_PROMPT)
-                .tool(ReadFile)
+                .tool(EditFile)
                 .tool(ReadDir)
+                .tool(ReadFile)
+                .tool(CreateFile)
                 .build();
 
             agent_loop(&agent).await?;
@@ -52,8 +54,10 @@ pub async fn run() -> anyhow::Result<()> {
             let agent = client
                 .agent(model_name)
                 .preamble(SYSTEM_PROMPT)
-                .tool(ReadFile)
+                .tool(EditFile)
                 .tool(ReadDir)
+                .tool(ReadFile)
+                .tool(CreateFile)
                 .build();
 
             agent_loop(&agent).await?;
@@ -69,8 +73,10 @@ pub async fn run() -> anyhow::Result<()> {
                 .agent(model_name)
                 .preamble(SYSTEM_PROMPT)
                 .max_tokens(50000)
-                .tool(ReadFile)
+                .tool(EditFile)
                 .tool(ReadDir)
+                .tool(ReadFile)
+                .tool(CreateFile)
                 .build();
 
             agent_loop(&agent).await?;
