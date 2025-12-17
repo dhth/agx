@@ -1,5 +1,6 @@
 mod create_file;
 mod edit_file;
+mod helpers;
 mod read_dir;
 mod read_file;
 

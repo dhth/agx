@@ -1,3 +1,4 @@
+use super::helpers::is_path_in_workspace;
 use colored::Colorize;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
@@ -17,6 +18,8 @@ pub struct EditFileArgs {
 pub enum EditFileError {
     #[error("invalid input provided: {0}")]
     InvalidInput(String),
+    #[error("absolute paths and parent directory traversal ('..') are not allowed")]
+    PathNotAllowed,
     #[error("old string and new string are the same")]
     NoChangesRequested,
     #[error("couldn't get metadata for file: {0}")]
@@ -75,7 +78,6 @@ impl Tool for EditFile {
 
     #[instrument(level = Level::TRACE, name = "tool-call: edit_file", ret, err(level = Level::ERROR), skip(self))]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        // TODO: add a check to ensure the file is in the current working directory
         println!(
             "{}",
             format!("[tool-call] edit_file '{}'", args.path).yellow()
@@ -86,7 +88,6 @@ impl Tool for EditFile {
                 "path cannot be empty".to_string(),
             ));
         }
-        let path = args.path;
 
         if args.old_str.is_empty() {
             // TODO: encode this in the type system
@@ -102,7 +103,11 @@ impl Tool for EditFile {
         let old_str = args.old_str;
         let new_str = args.new_str;
 
-        let path = PathBuf::from(path);
+        let path = PathBuf::from(&args.path);
+        if !is_path_in_workspace(&path) {
+            return Err(EditFileError::PathNotAllowed);
+        }
+
         let metadata = tokio::fs::metadata(&path).await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 EditFileError::FileDoesntExist

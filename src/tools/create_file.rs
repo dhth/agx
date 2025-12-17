@@ -1,3 +1,4 @@
+use super::helpers::is_path_in_workspace;
 use colored::Colorize;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
@@ -16,6 +17,8 @@ pub struct CreateFileArgs {
 pub enum CreateFileError {
     #[error("invalid input provided: {0}")]
     InvalidInput(String),
+    #[error("absolute paths and parent directory traversal ('..') are not allowed")]
+    PathNotAllowed,
     #[error("couldn't get metadata for path: {0}")]
     CouldntGetMetadata(std::io::Error),
     #[error("file already exists")]
@@ -66,7 +69,6 @@ impl Tool for CreateFile {
 
     #[instrument(level = Level::TRACE, name = "tool-call: create_file", ret, err(level = Level::ERROR), skip(self))]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        // TODO: add a check to ensure the file is in the current working directory
         println!(
             "{}",
             format!("[tool-call] create_file '{}'", args.path).yellow()
@@ -77,10 +79,12 @@ impl Tool for CreateFile {
                 "path cannot be empty".to_string(),
             ));
         }
-        let path = args.path;
         let contents = args.contents;
 
-        let path = PathBuf::from(path);
+        let path = PathBuf::from(&args.path);
+        if !is_path_in_workspace(&path) {
+            return Err(CreateFileError::PathNotAllowed);
+        }
 
         match tokio::fs::metadata(&path).await {
             Ok(m) => {
