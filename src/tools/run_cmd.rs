@@ -3,7 +3,6 @@ use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::process::Command;
 use tracing::{Level, instrument};
 
 const BLOCKED_CMD_PATTERNS: [&str; 23] = [
@@ -67,7 +66,7 @@ impl Tool for RunCmd {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Run a shell command via bash. Will return the combined stdout and stderr of the command.".to_string(),
+            description: "Run a shell command via the system shell. Returns the command’s success flag, exit status code (if available), stdout, and stderr".to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -104,7 +103,10 @@ impl Tool for RunCmd {
 
         // TODO: make it cross-platform, have fallback if bash unavailable
         // TODO: add timeout
-        let output = Command::new("bash").args(["-c", &cmd]).output()?;
+        let output = tokio::process::Command::new("bash")
+            .args(["-c", &cmd])
+            .output()
+            .await?;
 
         Ok(RunCmdResponse {
             success: output.status.success(),
