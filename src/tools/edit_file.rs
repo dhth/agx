@@ -20,7 +20,7 @@ pub enum EditFileError {
     #[error("old string and new string are the same")]
     NoChangesRequested,
     #[error("couldn't get metadata for file: {0}")]
-    CouldntGetMetadata(#[from] std::io::Error),
+    CouldntGetMetadata(std::io::Error),
     #[error("provided path is not a file")]
     NotAFile,
     #[error("file doesn't exist")]
@@ -36,15 +36,21 @@ pub enum EditFileError {
 #[derive(Deserialize, Serialize)]
 pub struct EditFile;
 
+#[derive(Debug, Serialize)]
+pub struct EditFileResponse {
+    path: String,
+    num_bytes_written: usize,
+}
+
 impl Tool for EditFile {
     const NAME: &'static str = "edit_file";
     type Error = EditFileError;
     type Args = EditFileArgs;
-    type Output = ();
+    type Output = EditFileResponse;
 
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
-            name: "edit_file".to_string(),
+            name: Self::NAME.to_string(),
             description: "Edit an already existing file".to_string(),
             parameters: json!({
                 "type": "object",
@@ -118,10 +124,13 @@ impl Tool for EditFile {
             return Err(EditFileError::NothingWillChange);
         }
 
-        tokio::fs::write(path, new_contents)
+        tokio::fs::write(&path, &new_contents)
             .await
             .map_err(EditFileError::CouldntWriteToFile)?;
 
-        Ok(())
+        Ok(EditFileResponse {
+            path: path.to_string_lossy().to_string(),
+            num_bytes_written: new_contents.len(),
+        })
     }
 }

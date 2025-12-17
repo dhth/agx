@@ -17,11 +17,13 @@ pub enum CreateFileError {
     #[error("invalid input provided: {0}")]
     InvalidInput(String),
     #[error("couldn't get metadata for path: {0}")]
-    CouldntGetMetadata(#[from] std::io::Error),
+    CouldntGetMetadata(std::io::Error),
     #[error("file already exists")]
     AlreadyExists,
     #[error("a directory already exists at this path")]
     IsADir,
+    #[error("couldn't create directory: {0}")]
+    CouldntCreateDirectory(std::io::Error),
     #[error("couldn't write to file: {0}")]
     CouldntWriteToFile(std::io::Error),
 }
@@ -29,15 +31,21 @@ pub enum CreateFileError {
 #[derive(Deserialize, Serialize)]
 pub struct CreateFile;
 
+#[derive(Debug, Serialize)]
+pub struct CreateFileResponse {
+    path: String,
+    num_bytes_written: usize,
+}
+
 impl Tool for CreateFile {
     const NAME: &'static str = "create_file";
     type Error = CreateFileError;
     type Args = CreateFileArgs;
-    type Output = ();
+    type Output = CreateFileResponse;
 
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
-            name: "create_file".to_string(),
+            name: Self::NAME.to_string(),
             description: "Create a new file with contents".to_string(),
             parameters: json!({
                 "type": "object",
@@ -86,10 +94,19 @@ impl Tool for CreateFile {
             Err(e) => Err(CreateFileError::CouldntGetMetadata(e)),
         }?;
 
-        tokio::fs::write(path, contents)
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(CreateFileError::CouldntCreateDirectory)?;
+        }
+
+        tokio::fs::write(&path, &contents)
             .await
             .map_err(CreateFileError::CouldntWriteToFile)?;
 
-        Ok(())
+        Ok(CreateFileResponse {
+            path: path.to_string_lossy().to_string(),
+            num_bytes_written: contents.len(),
+        })
     }
 }
