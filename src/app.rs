@@ -1,5 +1,5 @@
 use crate::env::{get_env_var, get_optional_env_var};
-use crate::tools::{EditFile, ReadDir, ReadFile};
+use crate::tools::{CreateFile, EditFile, ReadDir, ReadFile};
 use anyhow::Context;
 use colored::Colorize;
 use rig::agent::Agent;
@@ -39,6 +39,7 @@ pub async fn run() -> anyhow::Result<()> {
                 .tool(EditFile)
                 .tool(ReadDir)
                 .tool(ReadFile)
+                .tool(CreateFile)
                 .build();
 
             agent_loop(&agent).await?;
@@ -56,6 +57,7 @@ pub async fn run() -> anyhow::Result<()> {
                 .tool(EditFile)
                 .tool(ReadDir)
                 .tool(ReadFile)
+                .tool(CreateFile)
                 .build();
 
             agent_loop(&agent).await?;
@@ -74,6 +76,7 @@ pub async fn run() -> anyhow::Result<()> {
                 .tool(EditFile)
                 .tool(ReadDir)
                 .tool(ReadFile)
+                .tool(CreateFile)
                 .build();
 
             agent_loop(&agent).await?;
