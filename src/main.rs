@@ -1,4 +1,6 @@
 mod app;
+mod session;
+mod domain;
 mod env;
 mod helpers;
 mod telemetry;
