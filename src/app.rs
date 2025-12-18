@@ -2,16 +2,19 @@ use crate::env::{get_env_var, get_optional_env_var};
 use crate::tools::{CreateFile, EditFile, ReadDir, ReadFile, RunCmd};
 use anyhow::Context;
 use colored::Colorize;
-use rig::agent::Agent;
+use futures::StreamExt;
+use rig::OneOrMany;
+use rig::agent::{Agent, MultiTurnStreamItem};
 use rig::client::{Client, CompletionClient};
-use rig::completion::{CompletionModel, Prompt};
-use rig::message::{AssistantContent, Message};
+use rig::completion::CompletionModel;
+use rig::message::{AssistantContent, Message, UserContent};
 use rig::providers::anthropic::client::AnthropicExt;
 use rig::providers::gemini::client::GeminiExt;
 use rig::providers::openrouter::client::OpenRouterExt;
 use rig::providers::{anthropic, gemini, openrouter};
-use std::collections::HashSet;
+use rig::streaming::{StreamedAssistantContent, StreamedUserContent, StreamingPrompt};
 use std::path::PathBuf;
+use tracing::{debug, trace};
 
 const BANNER: &str = include_str!("assets/logo.txt");
 const SYSTEM_PROMPT: &str = include_str!("assets/system-prompt.txt");
@@ -92,7 +95,7 @@ pub async fn run() -> anyhow::Result<()> {
 
 async fn agent_loop<M>(agent: &Agent<M>) -> anyhow::Result<()>
 where
-    M: CompletionModel,
+    M: CompletionModel + 'static,
 {
     let history_file_path = PathBuf::from(".agx");
     if let Some(parent) = history_file_path.parent() {
@@ -112,8 +115,6 @@ where
     );
 
     let mut chat_history = vec![];
-    let mut seen_messages_by_id = HashSet::new();
-    let mut seen_messages_by_content = HashSet::new();
 
     loop {
         let query = editor.readline("\n>>> ").context("couldn't read input")?;
@@ -125,42 +126,81 @@ where
             }
             q => {
                 _ = editor.add_history_entry(q);
-                if let Err(err) = agent
-                    .prompt(q)
-                    .with_history(&mut chat_history)
+
+                chat_history.push(Message::user(q));
+                debug!(query = q, "user entered query");
+
+                let mut stream = agent
+                    .stream_prompt(q)
                     .multi_turn(10)
-                    .await
-                {
-                    print_error(anyhow::anyhow!(err));
-                    continue;
-                }
+                    .with_history(chat_history.clone())
+                    .await;
 
-                for message in chat_history.iter() {
-                    if let Message::Assistant { id, content } = message {
-                        if let Some(msg_id) = id {
-                            if seen_messages_by_id.contains(msg_id) {
-                                continue;
+                let mut response_text = String::new();
+
+                while let Some(item) = stream.next().await {
+                    match item {
+                        Ok(rig::agent::MultiTurnStreamItem::StreamAssistantItem(content)) => {
+                            match content {
+                                StreamedAssistantContent::Text(text) => {
+                                    print!("{}", text.text.purple());
+                                    response_text.push_str(&text.text);
+                                }
+                                StreamedAssistantContent::ToolCall(tool_call) => {
+                                    println!(
+                                        "\n{}",
+                                        format!(
+                                            "[tool-call] {}({})",
+                                            tool_call.function.name, tool_call.function.arguments
+                                        )
+                                        .yellow()
+                                    );
+
+                                    chat_history.push(Message::Assistant {
+                                        id: None,
+                                        content: OneOrMany::one(AssistantContent::tool_call(
+                                            &tool_call.id,
+                                            &tool_call.function.name,
+                                            tool_call.function.arguments.clone(),
+                                        )),
+                                    });
+                                }
+                                StreamedAssistantContent::ToolCallDelta { id: _, delta: _ } => {}
+                                StreamedAssistantContent::Reasoning(reasoning) => {
+                                    print!("{}", "[reasoning] ".cyan());
+                                    for reasoning in reasoning.reasoning {
+                                        print!("{}", reasoning.to_string().cyan());
+                                    }
+                                }
+                                _ => {}
                             }
-                            seen_messages_by_id.insert(msg_id.to_string());
                         }
-
-                        if let AssistantContent::Text(text) = content.first() {
-                            let txt = text.text;
-                            if seen_messages_by_content.contains(&txt) {
-                                continue;
+                        Ok(MultiTurnStreamItem::StreamUserItem(user_content)) => match user_content
+                        {
+                            StreamedUserContent::ToolResult(tool_result) => {
+                                chat_history.push(Message::User {
+                                    content: OneOrMany::one(UserContent::tool_result(
+                                        tool_result.id,
+                                        tool_result.content,
+                                    )),
+                                });
                             }
-
-                            println!("{}", txt.purple());
-                            seen_messages_by_content.insert(txt);
+                        },
+                        Ok(MultiTurnStreamItem::FinalResponse(_final_resp)) => {
+                            println!();
                         }
-
-                        for cont in content.rest() {
-                            if let AssistantContent::Text(text) = cont {
-                                println!("{}", text.text.purple())
-                            }
+                        Ok(_) => {}
+                        Err(e) => {
+                            print_error(anyhow::anyhow!(e));
+                            break;
                         }
                     }
                 }
+
+                if !response_text.is_empty() {
+                    chat_history.push(Message::assistant(&response_text));
+                }
+                trace!(?chat_history, "one agent loop done");
             }
         }
     }
