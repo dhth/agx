@@ -1,5 +1,6 @@
 mod app;
 mod env;
+mod helpers;
 mod telemetry;
 mod tools;
 

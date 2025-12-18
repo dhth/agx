@@ -1,5 +1,4 @@
-use super::helpers::is_path_in_workspace;
-use colored::Colorize;
+use crate::helpers::is_path_in_workspace;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::{Deserialize, Serialize};
@@ -69,10 +68,6 @@ impl Tool for CreateFile {
 
     #[instrument(level = Level::TRACE, name = "tool-call: create_file", ret, err(level = Level::ERROR), skip(self))]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        println!(
-            "{}",
-            format!("[tool-call] create_file '{}'", args.path).yellow()
-        );
         if args.path.is_empty() {
             // TODO: encode this in the type system
             return Err(CreateFileError::InvalidInput(
