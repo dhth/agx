@@ -14,7 +14,7 @@ use rig::providers::openrouter::client::OpenRouterExt;
 use rig::providers::{anthropic, gemini, openrouter};
 use rig::streaming::{StreamedAssistantContent, StreamedUserContent, StreamingPrompt};
 use std::path::PathBuf;
-use tracing::{debug, trace};
+use tracing::{debug, error, trace};
 
 const BANNER: &str = include_str!("assets/logo.txt");
 const SYSTEM_PROMPT: &str = include_str!("assets/system-prompt.txt");
@@ -153,7 +153,7 @@ where
                                             "[tool-call] {}({})",
                                             tool_call.function.name, tool_call.function.arguments
                                         )
-                                        .yellow()
+                                        .cyan()
                                     );
 
                                     chat_history.push(Message::Assistant {
@@ -200,7 +200,10 @@ where
                 if !response_text.is_empty() {
                     chat_history.push(Message::assistant(&response_text));
                 }
-                trace!(?chat_history, "one agent loop done");
+                match serde_json::to_string_pretty(&chat_history) {
+                    Ok(history) => trace!(history, "one agent loop done"),
+                    Err(err) => error!(%err, "one agent loop done; couldn't log chat history"),
+                }
             }
         }
     }

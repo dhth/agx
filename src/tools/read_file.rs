@@ -42,7 +42,7 @@ impl Tool for ReadFile {
         }
     }
 
-    #[instrument(level = Level::TRACE, name = "tool-call: read_file", err(level = Level::ERROR), skip(self))]
+    #[instrument(level = Level::DEBUG, name = "tool-call: read_file", err(level = Level::ERROR), skip(self))]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         println!(
             "{}",
