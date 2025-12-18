@@ -1,4 +1,4 @@
-use super::helpers::is_path_in_workspace;
+use crate::helpers::is_path_in_workspace;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::{Deserialize, Serialize};

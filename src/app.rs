@@ -1,6 +1,8 @@
 use crate::env::{get_env_var, get_optional_env_var};
+use crate::helpers::path_to_dirname;
 use crate::tools::{CreateFile, EditFile, ReadDir, ReadFile, RunCmd};
 use anyhow::Context;
+use chrono::Local;
 use colored::Colorize;
 use futures::StreamExt;
 use rig::OneOrMany;
@@ -13,8 +15,8 @@ use rig::providers::gemini::client::GeminiExt;
 use rig::providers::openrouter::client::OpenRouterExt;
 use rig::providers::{anthropic, gemini, openrouter};
 use rig::streaming::{StreamedAssistantContent, StreamedUserContent, StreamingPrompt};
-use std::path::PathBuf;
-use tracing::{debug, error, trace};
+use std::path::Path;
+use tracing::{debug, error};
 
 const BANNER: &str = include_str!("assets/logo.txt");
 const SYSTEM_PROMPT: &str = include_str!("assets/system-prompt.txt");
@@ -27,6 +29,18 @@ pub async fn run() -> anyhow::Result<()> {
     let api_key = get_env_var("API_KEY")?;
     let model_name = get_env_var("MODEL_NAME")?;
     let base_url = get_optional_env_var("BASE_URL")?;
+
+    let cwd = std::env::current_dir().context("couldnt' determine current working directory")?;
+    let agx_log_dir = crate::telemetry::get_log_dir(&xdg);
+    let project_log_dir = agx_log_dir.join("projects").join(path_to_dirname(&cwd));
+    tokio::fs::create_dir_all(&project_log_dir)
+        .await
+        .with_context(|| {
+            format!(
+                "failed to create directory for logs: {:?}",
+                &project_log_dir,
+            )
+        })?;
 
     match provider.as_str() {
         "gemini" => {
@@ -46,7 +60,7 @@ pub async fn run() -> anyhow::Result<()> {
                 .tool(RunCmd)
                 .build();
 
-            agent_loop(&agent).await?;
+            agent_loop(&agent, &project_log_dir).await?;
         }
         "openrouter" => {
             let mut builder = openrouter::Client::builder().api_key(api_key);
@@ -65,7 +79,7 @@ pub async fn run() -> anyhow::Result<()> {
                 .tool(RunCmd)
                 .build();
 
-            agent_loop(&agent).await?;
+            agent_loop(&agent, &project_log_dir).await?;
         }
         "anthropic" => {
             let mut builder = anthropic::Client::builder().api_key(api_key);
@@ -85,7 +99,7 @@ pub async fn run() -> anyhow::Result<()> {
                 .tool(RunCmd)
                 .build();
 
-            agent_loop(&agent).await?;
+            agent_loop(&agent, &project_log_dir).await?;
         }
         other => anyhow::bail!(r#"unknown provider specified: "{other}""#),
     }
@@ -93,15 +107,20 @@ pub async fn run() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn agent_loop<M>(agent: &Agent<M>) -> anyhow::Result<()>
+async fn agent_loop<M, P>(agent: &Agent<M>, project_log_dir: P) -> anyhow::Result<()>
 where
     M: CompletionModel + 'static,
+    P: AsRef<Path>,
 {
-    let history_file_path = PathBuf::from(".agx");
-    if let Some(parent) = history_file_path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create directory for history: {:?}", parent,))?;
-    }
+    let now = Local::now();
+    let chats_dir = project_log_dir
+        .as_ref()
+        .join("chats")
+        .join(now.format("%Y-%m-%d-%H-%M-%S").to_string());
+    tokio::fs::create_dir_all(&chats_dir)
+        .await
+        .with_context(|| format!("failed to create directory for chats: {:?}", &chats_dir,))?;
+    let history_file_path = project_log_dir.as_ref().join("history.txt");
 
     let mut editor = rustyline::DefaultEditor::new()?;
     let _ = editor.load_history(&history_file_path);
@@ -116,6 +135,7 @@ where
 
     let mut chat_history = vec![];
 
+    let mut loop_index = 0;
     loop {
         let query = editor.readline("\n>>> ").context("couldn't read input")?;
 
@@ -128,7 +148,7 @@ where
                 _ = editor.add_history_entry(q);
 
                 chat_history.push(Message::user(q));
-                debug!(query = q, "user entered query");
+                debug!(loop_index, query = q, "user entered query");
 
                 let mut stream = agent
                     .stream_prompt(q)
@@ -138,15 +158,19 @@ where
 
                 let mut response_text = String::new();
 
+                let mut stream_index = 0;
                 while let Some(item) = stream.next().await {
+                    stream_index += 1;
                     match item {
                         Ok(rig::agent::MultiTurnStreamItem::StreamAssistantItem(content)) => {
                             match content {
                                 StreamedAssistantContent::Text(text) => {
+                                    debug!(loop_index, stream_index, kind="StreamedAssistantContent::Text", text = %text.text, "stream item received");
                                     print!("{}", text.text.purple());
                                     response_text.push_str(&text.text);
                                 }
                                 StreamedAssistantContent::ToolCall(tool_call) => {
+                                    debug!(loop_index, stream_index, kind="StreamedAssistantContent::ToolCall", id = %tool_call.id, name = %tool_call.function.name, "stream item received");
                                     println!(
                                         "\n{}",
                                         format!(
@@ -155,6 +179,11 @@ where
                                         )
                                         .cyan()
                                     );
+
+                                    if !response_text.is_empty() {
+                                        chat_history.push(Message::assistant(&response_text));
+                                        response_text.clear();
+                                    }
 
                                     chat_history.push(Message::Assistant {
                                         id: None,
@@ -165,19 +194,48 @@ where
                                         )),
                                     });
                                 }
-                                StreamedAssistantContent::ToolCallDelta { id: _, delta: _ } => {}
+                                StreamedAssistantContent::ToolCallDelta { .. } => {
+                                    debug!(
+                                        loop_index,
+                                        stream_index,
+                                        kind = "StreamedAssistantContent::ToolCallDelta",
+                                        "stream item received"
+                                    );
+                                }
                                 StreamedAssistantContent::Reasoning(reasoning) => {
-                                    print!("{}", "[reasoning] ".cyan());
+                                    debug!(
+                                        loop_index,
+                                        stream_index,
+                                        kind = "StreamedAssistantContent::Reasoning",
+                                        "stream item received"
+                                    );
+                                    print!("\n{}", "[reasoning] ".cyan());
                                     for reasoning in reasoning.reasoning {
                                         print!("{}", reasoning.to_string().cyan());
                                     }
                                 }
-                                _ => {}
+                                StreamedAssistantContent::ReasoningDelta { .. } => {
+                                    debug!(
+                                        loop_index,
+                                        stream_index,
+                                        kind = "StreamedAssistantContent::ReasoningDelta",
+                                        "stream item received"
+                                    );
+                                }
+                                StreamedAssistantContent::Final(_) => {
+                                    debug!(
+                                        loop_index,
+                                        stream_index,
+                                        kind = "StreamedAssistantContent::Final",
+                                        "stream item received"
+                                    );
+                                }
                             }
                         }
                         Ok(MultiTurnStreamItem::StreamUserItem(user_content)) => match user_content
                         {
                             StreamedUserContent::ToolResult(tool_result) => {
+                                debug!(loop_index, stream_index, kind="StreamedUserContent::ToolResult", id = %tool_result.id, "stream item received");
                                 chat_history.push(Message::User {
                                     content: OneOrMany::one(UserContent::tool_result(
                                         tool_result.id,
@@ -187,10 +245,24 @@ where
                             }
                         },
                         Ok(MultiTurnStreamItem::FinalResponse(_final_resp)) => {
+                            debug!(
+                                loop_index,
+                                stream_index,
+                                kind = "MultiTurnStreamItem::FinalResponse",
+                                "stream item received"
+                            );
                             println!();
                         }
-                        Ok(_) => {}
+                        Ok(_) => {
+                            debug!(
+                                loop_index,
+                                stream_index,
+                                kind = "Ok(_unknown)",
+                                "stream item received"
+                            );
+                        }
                         Err(e) => {
+                            debug!(loop_index, stream_index, kind="Err", error = %e, "stream item received");
                             print_error(anyhow::anyhow!(e));
                             break;
                         }
@@ -200,10 +272,20 @@ where
                 if !response_text.is_empty() {
                     chat_history.push(Message::assistant(&response_text));
                 }
+
                 match serde_json::to_string_pretty(&chat_history) {
-                    Ok(history) => trace!(history, "one agent loop done"),
-                    Err(err) => error!(%err, "one agent loop done; couldn't log chat history"),
+                    Ok(history) => {
+                        let chat_history_file_path =
+                            chats_dir.join(format!("loop-{}.json", loop_index));
+                        if let Err(e) = tokio::fs::write(&chat_history_file_path, history).await {
+                            error!(loop_index, err=%e, "one agent loop done; couldn't write chat history to file")
+                        }
+                    }
+                    Err(err) => {
+                        error!(loop_index, %err, "one agent loop done; couldn't serialize chat history")
+                    }
                 }
+                loop_index += 1;
             }
         }
     }

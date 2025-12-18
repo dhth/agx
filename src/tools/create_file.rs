@@ -1,4 +1,4 @@
-use super::helpers::is_path_in_workspace;
+use crate::helpers::is_path_in_workspace;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::{Deserialize, Serialize};
@@ -66,7 +66,7 @@ impl Tool for CreateFile {
         }
     }
 
-    #[instrument(level = Level::DEBUG, name = "tool-call: create_file", ret, err(level = Level::ERROR), skip(self))]
+    #[instrument(level = Level::TRACE, name = "tool-call: create_file", ret, err(level = Level::ERROR), skip(self))]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         if args.path.is_empty() {
             // TODO: encode this in the type system

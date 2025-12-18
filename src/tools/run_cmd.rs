@@ -79,7 +79,7 @@ impl Tool for RunCmd {
         }
     }
 
-    #[instrument(level = Level::DEBUG, name = "tool-call: run_cmd", ret, err(level = Level::ERROR), skip(self))]
+    #[instrument(level = Level::TRACE, name = "tool-call: run_cmd", ret, err(level = Level::ERROR), skip(self))]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         if args.command.trim().is_empty() {
             return Err(RunCmdError::CmdIsEmpty);

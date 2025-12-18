@@ -39,7 +39,7 @@ fn get_log_file_path(xdg: &Xdg) -> anyhow::Result<PathBuf> {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn get_log_dir(xdg: &Xdg) -> PathBuf {
+pub fn get_log_dir(xdg: &Xdg) -> PathBuf {
     // XDG spec suggests using XDG_STATE_HOME for logs
     // https://specifications.freedesktop.org/basedir/latest/#variables
 
@@ -49,6 +49,6 @@ fn get_log_dir(xdg: &Xdg) -> PathBuf {
 }
 
 #[cfg(target_os = "windows")]
-fn get_log_dir(xdg: &Xdg) -> PathBuf {
+pub fn get_log_dir(xdg: &Xdg) -> PathBuf {
     xdg.cache_dir().join("agx")
 }

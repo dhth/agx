@@ -65,7 +65,7 @@ impl Tool for ReadDir {
         }
     }
 
-    #[instrument(level = Level::DEBUG, name = "tool-call: read_dir", ret, err(level = Level::ERROR), skip(self))]
+    #[instrument(level = Level::TRACE, name = "tool-call: read_dir", ret, err(level = Level::ERROR), skip(self))]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         println!(
             "{}",
