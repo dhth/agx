@@ -4,11 +4,13 @@ use crate::helpers::path_to_dirname;
 use crate::session::Session;
 use crate::tools::{CreateFile, EditFile, ReadDir, ReadFile, RunCmd};
 use anyhow::Context;
+use reqwest::header::HeaderValue;
 use rig::client::{Client, CompletionClient};
 use rig::providers::anthropic::client::AnthropicExt;
 use rig::providers::gemini::client::GeminiExt;
+use rig::providers::openai::OpenAICompletionsExt;
 use rig::providers::openrouter::client::OpenRouterExt;
-use rig::providers::{anthropic, gemini, openrouter};
+use rig::providers::{anthropic, gemini, openai, openrouter};
 use std::str::FromStr;
 
 const SYSTEM_PROMPT: &str = include_str!("assets/system-prompt.txt");
@@ -82,6 +84,53 @@ pub async fn run() -> anyhow::Result<()> {
                 builder = builder.base_url(u);
             }
             let client: Client<AnthropicExt> = builder.build().context("couldn't build client")?;
+
+            let agent = client
+                .agent(&model_name)
+                .preamble(SYSTEM_PROMPT)
+                .max_tokens(50000)
+                .tool(CreateFile)
+                .tool(EditFile)
+                .tool(ReadDir)
+                .tool(ReadFile)
+                .tool(RunCmd)
+                .build();
+
+            let mut session = Session::new(agent, project_log_dir, provider, &model_name);
+            session.run().await?;
+        }
+        Provider::GitHubCopilot => {
+            let mut headers = reqwest::header::HeaderMap::new();
+            headers.insert(
+                "User-Agent",
+                HeaderValue::from_static("GitHubCopilotChat/0.32.4"),
+            );
+            headers.insert("Editor-Version", HeaderValue::from_static("vscode/1.105.1"));
+            headers.insert(
+                "Editor-Plugin-Version",
+                HeaderValue::from_static("copilot-chat/0.32.4"),
+            );
+            headers.insert(
+                "Copilot-Integration-Id",
+                HeaderValue::from_static("vscode-chat"),
+            );
+
+            let http_client = reqwest::Client::builder()
+                .default_headers(headers)
+                .build()
+                .context("couldn't build http client for copilot API calls")?;
+
+            let mut builder = openai::Client::<reqwest::Client>::builder()
+                .api_key(api_key)
+                .http_client(http_client);
+
+            if let Some(u) = base_url {
+                builder = builder.base_url(u);
+            }
+            let client: Client<OpenAICompletionsExt> = builder
+                .build()
+                .context("couldn't build client")?
+                .completions_api(); // This is to maintain consistency with the other clients
 
             let agent = client
                 .agent(&model_name)

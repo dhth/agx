@@ -2,9 +2,10 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 pub enum Provider {
-    Gemini,
-    Openrouter,
     Anthropic,
+    Gemini,
+    GitHubCopilot,
+    Openrouter,
 }
 
 impl FromStr for Provider {
@@ -12,10 +13,11 @@ impl FromStr for Provider {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "gemini" => Ok(Self::Gemini),
-            "openrouter" => Ok(Self::Openrouter),
             "anthropic" => Ok(Self::Anthropic),
-            _ => Err("invalid provider; allowed values: [gemini, openrouter, anthropic]"),
+            "gemini" => Ok(Self::Gemini),
+            "openai" => Ok(Self::GitHubCopilot),
+            "openrouter" => Ok(Self::Openrouter),
+            _ => Err("invalid provider; allowed values: [anthropic, gemini, openai, openrouter]"),
         }
     }
 }
@@ -23,9 +25,10 @@ impl FromStr for Provider {
 impl Display for Provider {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = match self {
-            Provider::Gemini => "gemini",
-            Provider::Openrouter => "openrouter",
             Provider::Anthropic => "anthropic",
+            Provider::Gemini => "gemini",
+            Provider::GitHubCopilot => "github-copilot",
+            Provider::Openrouter => "openrouter",
         };
 
         write!(f, "{}", name)

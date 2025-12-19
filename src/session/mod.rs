@@ -78,7 +78,7 @@ where
                 print_newline_before_prompt = true;
                 ""
             };
-            println!("{}{}", prefix, self.get_info().yellow().bold());
+            println!("{}{}", prefix, self.get_info());
             let query = editor
                 .readline(&prompt_marker)
                 .context("couldn't read input")?;
@@ -268,10 +268,13 @@ where
     fn get_info(&self) -> String {
         if self.tokens_used == 0 {
             format!("[{}/{}]", &self.provider, &self.model_name)
+                .yellow()
+                .to_string()
         } else {
             format!(
-                "[{}/{}]  {} tokens used",
-                &self.provider, &self.model_name, self.tokens_used
+                "{}  {}",
+                format!("[{}/{}]", &self.provider, &self.model_name,).yellow(),
+                format!("{} tokens used", self.tokens_used).cyan(),
             )
         }
     }
