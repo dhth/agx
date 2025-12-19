@@ -1,4 +1,3 @@
-use colored::Colorize;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::{Deserialize, Serialize};
@@ -44,11 +43,6 @@ impl Tool for ReadFile {
 
     #[instrument(level = Level::TRACE, name = "tool-call: read_file", err(level = Level::ERROR), skip(self))]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        println!(
-            "{}",
-            format!("[tool-call] read_file '{}'", args.path).yellow()
-        );
-
         let contents = tokio::fs::read_to_string(&args.path).await?;
 
         trace!(bytes_read = contents.len(), "file read successfully");

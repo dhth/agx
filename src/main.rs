@@ -1,6 +1,8 @@
 mod app;
+mod domain;
 mod env;
 mod helpers;
+mod session;
 mod telemetry;
 mod tools;
 
