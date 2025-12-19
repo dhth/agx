@@ -22,7 +22,6 @@ where
     project_log_dir: PathBuf,
     provider: Provider,
     model_name: String,
-    tokens_used: u64,
     loop_count: usize,
     chat_history: Vec<Message>,
 }
@@ -42,7 +41,6 @@ where
             project_log_dir,
             provider,
             model_name: model_name.into(),
-            tokens_used: 0,
             loop_count: 0,
             chat_history: Vec::new(),
         }
@@ -70,7 +68,7 @@ where
         );
 
         let mut print_newline_before_prompt = false;
-        let prompt_marker = "❯❯❯ ".bright_blue().to_string();
+        let prompt_marker = "> ".bright_blue().to_string();
         loop {
             let prefix = if print_newline_before_prompt {
                 "\n"
@@ -78,7 +76,11 @@ where
                 print_newline_before_prompt = true;
                 ""
             };
-            println!("{}{}", prefix, self.get_info());
+            println!(
+                "{}{}",
+                prefix,
+                format!("[{}/{}]", &self.provider, &self.model_name).yellow()
+            );
             let query = editor
                 .readline(&prompt_marker)
                 .context("couldn't read input")?;
@@ -96,7 +98,6 @@ where
                 }
                 "/new" => {
                     self.chat_history.clear();
-                    self.tokens_used = 0;
                     print_newline_before_prompt = false;
                     _ = editor.clear_screen();
                     continue;
@@ -117,7 +118,7 @@ where
                     let mut stream = self
                         .agent
                         .stream_prompt(q)
-                        .multi_turn(10)
+                        .multi_turn(30)
                         .with_history(self.chat_history.clone())
                         .await;
 
@@ -130,19 +131,15 @@ where
                                 match content {
                                     StreamedAssistantContent::Text(text) => {
                                         debug!(loop_index = self.loop_count, stream_index, kind="StreamedAssistantContent::Text", text = %text.text, "stream item received");
-                                        print!("{}", text.text.purple());
+                                        print!("{}", text.text);
                                         response_text.push_str(&text.text);
                                     }
                                     StreamedAssistantContent::ToolCall(tool_call) => {
                                         debug!(loop_index = self.loop_count, stream_index, kind="StreamedAssistantContent::ToolCall", id = %tool_call.id, name = %tool_call.function.name, "stream item received");
                                         println!(
                                             "\n{}",
-                                            format!(
-                                                "[tool-call] {}({})",
-                                                tool_call.function.name,
-                                                tool_call.function.arguments
-                                            )
-                                            .cyan()
+                                            format!("[tool-call] {}", tool_call.function.name,)
+                                                .cyan()
                                         );
 
                                         if !response_text.is_empty() {
@@ -211,8 +208,7 @@ where
                                     }
                                 }
                             }
-                            Ok(MultiTurnStreamItem::FinalResponse(final_resp)) => {
-                                self.tokens_used += final_resp.usage().total_tokens;
+                            Ok(MultiTurnStreamItem::FinalResponse(_final_resp)) => {
                                 debug!(
                                     loop_index = self.loop_count,
                                     stream_index,
@@ -263,20 +259,6 @@ where
         let _ = editor.save_history(&history_file_path);
 
         Ok(())
-    }
-
-    fn get_info(&self) -> String {
-        if self.tokens_used == 0 {
-            format!("[{}/{}]", &self.provider, &self.model_name)
-                .yellow()
-                .to_string()
-        } else {
-            format!(
-                "{}  {}",
-                format!("[{}/{}]", &self.provider, &self.model_name,).yellow(),
-                format!("{} tokens used", self.tokens_used).cyan(),
-            )
-        }
     }
 }
 
