@@ -1,10 +1,10 @@
 use crate::domain::Provider;
 use crate::env::{get_env_var, get_optional_env_var};
 use crate::helpers::path_to_dirname;
+use crate::providers::copilot;
 use crate::session::Session;
 use crate::tools::{CreateFile, EditFile, ReadDir, ReadFile, RunCmd};
 use anyhow::Context;
-use reqwest::header::HeaderValue;
 use rig::client::{Client, CompletionClient};
 use rig::providers::anthropic::client::AnthropicExt;
 use rig::providers::gemini::client::GeminiExt;
@@ -100,33 +100,20 @@ pub async fn run() -> anyhow::Result<()> {
             session.run().await?;
         }
         Provider::GitHubCopilot => {
-            let mut headers = reqwest::header::HeaderMap::new();
-            headers.insert(
-                "User-Agent",
-                HeaderValue::from_static("GitHubCopilotChat/0.32.4"),
-            );
-            headers.insert("Editor-Version", HeaderValue::from_static("vscode/1.105.1"));
-            headers.insert(
-                "Editor-Plugin-Version",
-                HeaderValue::from_static("copilot-chat/0.32.4"),
-            );
-            headers.insert(
-                "Copilot-Integration-Id",
-                HeaderValue::from_static("vscode-chat"),
-            );
-
             let http_client = reqwest::Client::builder()
-                .default_headers(headers)
+                .default_headers(copilot::get_headers())
                 .build()
                 .context("couldn't build http client for copilot API calls")?;
 
-            let mut builder = openai::Client::<reqwest::Client>::builder()
-                .api_key(api_key)
+            let copilot_auth = copilot::get_auth_token(&http_client, &api_key)
+                .await
+                .context("couldn't get a short lived GitHub Copilot token")?;
+
+            let builder = openai::Client::<reqwest::Client>::builder()
+                .base_url(&copilot_auth.endpoints.api)
+                .api_key(&copilot_auth.token)
                 .http_client(http_client);
 
-            if let Some(u) = base_url {
-                builder = builder.base_url(u);
-            }
             let client: Client<OpenAICompletionsExt> = builder
                 .build()
                 .context("couldn't build client")?
