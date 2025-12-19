@@ -70,6 +70,7 @@ where
         );
 
         let mut print_newline_before_prompt = false;
+        let prompt_marker = "❯❯❯ ".bright_blue().to_string();
         loop {
             let prefix = if print_newline_before_prompt {
                 "\n"
@@ -78,7 +79,9 @@ where
                 ""
             };
             println!("{}{}", prefix, self.get_info().yellow().bold());
-            let query = editor.readline("❯❯ ").context("couldn't read input")?;
+            let query = editor
+                .readline(&prompt_marker)
+                .context("couldn't read input")?;
 
             match query.trim() {
                 "" => {}
@@ -87,18 +90,18 @@ where
                     print_newline_before_prompt = false;
                     continue;
                 }
-                "help" => {
+                "/help" => {
                     print!("{}", COMMANDS.green());
                     continue;
                 }
-                "new" => {
+                "/new" => {
                     self.chat_history.clear();
                     self.tokens_used = 0;
                     print_newline_before_prompt = false;
                     _ = editor.clear_screen();
                     continue;
                 }
-                "quit" | "exit" | "bye" | ":q" => {
+                "/quit" | "/exit" | "bye" | ":q" => {
                     break;
                 }
                 q => {

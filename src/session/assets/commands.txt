@@ -1,5 +1,5 @@
  commands
    clear                                  clear screen
-   help                                   show help
-   new                                    start new session
-   quit / exit / bye / :q                 quit
+   /help                                  show help
+   /new                                   start new session
+   /quit | /exit | bye | :q               quit
