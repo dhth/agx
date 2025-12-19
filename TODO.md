@@ -1,0 +1,4 @@
+- [ ] Timeout for `run_cmd` tool call
+- [ ] Show output of `run_cmd` tool call?
+- [ ] Handle copilot token refresh
+- [ ] Use responses API wherever applicable?

@@ -45,13 +45,10 @@ pub async fn get_auth_token(client: &Client, oauth_token: &str) -> anyhow::Resul
         .await
         .context("couldn't send request")?;
 
-    let response = response
-        .text()
+    let token: CopilotAuth = response
+        .json()
         .await
-        .context("couldn't get response text")?;
-
-    let token: CopilotAuth =
-        serde_json::from_str(&response).context("couldn't deserialize response")?;
+        .context("couldn't deserialize response")?;
 
     Ok(token)
 }

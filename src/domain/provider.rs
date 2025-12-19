@@ -1,6 +1,7 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
+#[derive(Debug)]
 pub enum Provider {
     Anthropic,
     Gemini,
@@ -15,9 +16,11 @@ impl FromStr for Provider {
         match s {
             "anthropic" => Ok(Self::Anthropic),
             "gemini" => Ok(Self::Gemini),
-            "openai" => Ok(Self::GitHubCopilot),
+            "github-copilot" => Ok(Self::GitHubCopilot),
             "openrouter" => Ok(Self::Openrouter),
-            _ => Err("invalid provider; allowed values: [anthropic, gemini, openai, openrouter]"),
+            _ => Err(
+                "invalid provider; allowed values: [anthropic, gemini, github-copilot, openrouter]",
+            ),
         }
     }
 }

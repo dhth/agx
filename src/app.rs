@@ -122,7 +122,6 @@ pub async fn run() -> anyhow::Result<()> {
             let agent = client
                 .agent(&model_name)
                 .preamble(SYSTEM_PROMPT)
-                .max_tokens(50000)
                 .tool(CreateFile)
                 .tool(EditFile)
                 .tool(ReadDir)
