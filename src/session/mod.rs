@@ -149,8 +149,8 @@ where
                                             "stream item received"
                                         );
                                         print!("\n{}", "[reasoning] ".cyan());
-                                        for reasoning in reasoning.reasoning {
-                                            print!("{}", reasoning.to_string().cyan());
+                                        for r in reasoning.reasoning {
+                                            print!("{}", r.to_string().cyan());
                                         }
                                     }
                                     StreamedAssistantContent::ReasoningDelta { .. } => {
