@@ -45,6 +45,10 @@ pub async fn get_auth_token(client: &Client, oauth_token: &str) -> anyhow::Resul
         .await
         .context("couldn't send request")?;
 
+    if response.status().as_u16() != 200 {
+        anyhow::bail!("GitHub API sent a non-success response: {:?}", response);
+    }
+
     let token: CopilotAuth = response
         .json()
         .await
