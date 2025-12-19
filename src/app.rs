@@ -1,14 +1,16 @@
 use crate::domain::Provider;
 use crate::env::{get_env_var, get_optional_env_var};
 use crate::helpers::path_to_dirname;
+use crate::providers::copilot;
 use crate::session::Session;
 use crate::tools::{CreateFile, EditFile, ReadDir, ReadFile, RunCmd};
 use anyhow::Context;
 use rig::client::{Client, CompletionClient};
 use rig::providers::anthropic::client::AnthropicExt;
 use rig::providers::gemini::client::GeminiExt;
+use rig::providers::openai::OpenAICompletionsExt;
 use rig::providers::openrouter::client::OpenRouterExt;
-use rig::providers::{anthropic, gemini, openrouter};
+use rig::providers::{anthropic, gemini, openai, openrouter};
 use std::str::FromStr;
 
 const SYSTEM_PROMPT: &str = include_str!("assets/system-prompt.txt");
@@ -87,6 +89,39 @@ pub async fn run() -> anyhow::Result<()> {
                 .agent(&model_name)
                 .preamble(SYSTEM_PROMPT)
                 .max_tokens(50000)
+                .tool(CreateFile)
+                .tool(EditFile)
+                .tool(ReadDir)
+                .tool(ReadFile)
+                .tool(RunCmd)
+                .build();
+
+            let mut session = Session::new(agent, project_log_dir, provider, &model_name);
+            session.run().await?;
+        }
+        Provider::GitHubCopilot => {
+            let http_client = reqwest::Client::builder()
+                .default_headers(copilot::get_headers())
+                .build()
+                .context("couldn't build http client for copilot API calls")?;
+
+            let copilot_auth = copilot::get_auth_token(&http_client, &api_key)
+                .await
+                .context("couldn't get a short lived GitHub Copilot token")?;
+
+            let builder = openai::Client::<reqwest::Client>::builder()
+                .base_url(&copilot_auth.endpoints.api)
+                .api_key(&copilot_auth.token)
+                .http_client(http_client);
+
+            let client: Client<OpenAICompletionsExt> = builder
+                .build()
+                .context("couldn't build client")?
+                .completions_api(); // This is to maintain consistency with the other clients
+
+            let agent = client
+                .agent(&model_name)
+                .preamble(SYSTEM_PROMPT)
                 .tool(CreateFile)
                 .tool(EditFile)
                 .tool(ReadDir)
