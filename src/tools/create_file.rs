@@ -1,4 +1,5 @@
 use crate::helpers::is_path_in_workspace;
+use colored::Colorize;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::{Deserialize, Serialize};
@@ -31,7 +32,7 @@ pub enum CreateFileError {
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct CreateFile;
+pub struct CreateFileTool;
 
 #[derive(Debug, Serialize)]
 pub struct CreateFileResponse {
@@ -39,7 +40,7 @@ pub struct CreateFileResponse {
     num_bytes_written: usize,
 }
 
-impl Tool for CreateFile {
+impl Tool for CreateFileTool {
     const NAME: &'static str = "create_file";
     type Error = CreateFileError;
     type Args = CreateFileArgs;
@@ -68,6 +69,20 @@ impl Tool for CreateFile {
 
     #[instrument(level = Level::TRACE, name = "tool-call: create_file", ret, err(level = Level::ERROR), skip(self))]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        let log = format!("created file ({})", args.path).cyan();
+        let result = self.call_inner(args).await;
+        let status = if result.is_ok() { "✓" } else { "❌" };
+        println!("{} {}", log, status,);
+
+        result
+    }
+}
+
+impl CreateFileTool {
+    async fn call_inner(
+        &self,
+        args: CreateFileArgs,
+    ) -> Result<CreateFileResponse, CreateFileError> {
         if args.path.is_empty() {
             // TODO: encode this in the type system
             return Err(CreateFileError::InvalidInput(
