@@ -1,3 +1,4 @@
+use colored::Colorize;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::{Deserialize, Serialize};
@@ -39,9 +40,9 @@ pub enum ReadDirError {
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct ReadDir;
+pub struct ReadDirTool;
 
-impl Tool for ReadDir {
+impl Tool for ReadDirTool {
     const NAME: &'static str = "read_dir";
     type Error = ReadDirError;
     type Args = ReadDirArgs;
@@ -66,6 +67,17 @@ impl Tool for ReadDir {
 
     #[instrument(level = Level::TRACE, name = "tool-call: read_dir", ret, err(level = Level::ERROR), skip(self))]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        let log = format!("read directory ({})", args.path).cyan();
+        let result = self.call_inner(args).await;
+        let status = if result.is_ok() { "✓" } else { "❌" };
+        println!("{} {}", log, status,);
+
+        result
+    }
+}
+
+impl ReadDirTool {
+    async fn call_inner(&self, args: ReadDirArgs) -> Result<Vec<DirEntry>, ReadDirError> {
         let metadata = tokio::fs::metadata(&args.path).await?;
         if !metadata.is_dir() {
             return Err(ReadDirError::PathNotADir);

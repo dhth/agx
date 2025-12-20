@@ -19,6 +19,7 @@ where
     M: CompletionModel + 'static,
 {
     agent: Agent<M>,
+    project_dir: PathBuf,
     project_log_dir: PathBuf,
     provider: Provider,
     model_name: String,
@@ -32,12 +33,14 @@ where
 {
     pub fn new(
         agent: Agent<M>,
+        project_dir: PathBuf,
         project_log_dir: PathBuf,
         provider: Provider,
         model_name: impl Into<String>,
     ) -> Self {
         Self {
             agent,
+            project_dir,
             project_log_dir,
             provider,
             model_name: model_name.into(),
@@ -69,6 +72,11 @@ where
 
         let mut print_newline_before_prompt = false;
         let prompt_marker = "> ".bright_blue().to_string();
+        let metadata = format!(
+            "{}  {}",
+            format!("[{}/{}]", &self.provider, &self.model_name).yellow(),
+            self.project_dir.to_string_lossy().blue(),
+        );
         loop {
             let prefix = if print_newline_before_prompt {
                 "\n"
@@ -76,11 +84,7 @@ where
                 print_newline_before_prompt = true;
                 ""
             };
-            println!(
-                "{}{}",
-                prefix,
-                format!("[{}/{}]", &self.provider, &self.model_name).yellow()
-            );
+            println!("{}{}", prefix, metadata);
             let query = editor
                 .readline(&prompt_marker)
                 .context("couldn't read input")?;
@@ -136,11 +140,6 @@ where
                                     }
                                     StreamedAssistantContent::ToolCall(tool_call) => {
                                         debug!(loop_index = self.loop_count, stream_index, kind="StreamedAssistantContent::ToolCall", id = %tool_call.id, name = %tool_call.function.name, "stream item received");
-                                        println!(
-                                            "\n{}",
-                                            format!("[tool-call] {}", tool_call.function.name,)
-                                                .cyan()
-                                        );
 
                                         if !response_text.is_empty() {
                                             self.chat_history

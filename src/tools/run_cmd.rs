@@ -1,7 +1,10 @@
+use colored::Colorize;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::io::Write;
+use tokio::time::Instant;
 use tracing::{Level, instrument};
 
 const BLOCKED_CMD_PATTERNS: [&str; 23] = [
@@ -46,7 +49,7 @@ pub enum RunCmdError {
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct RunCmd;
+pub struct RunCmdTool;
 
 #[derive(Debug, Serialize)]
 pub struct RunCmdResponse {
@@ -56,7 +59,7 @@ pub struct RunCmdResponse {
     stderr: String,
 }
 
-impl Tool for RunCmd {
+impl Tool for RunCmdTool {
     const NAME: &'static str = "run_cmd";
     type Error = RunCmdError;
     type Args = RunCmdArgs;
@@ -81,6 +84,21 @@ impl Tool for RunCmd {
 
     #[instrument(level = Level::TRACE, name = "tool-call: run_cmd", ret, err(level = Level::ERROR), skip(self))]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        print!("{}", format!("running command ({}) ", args.command).cyan());
+        let _ = std::io::stdout().flush();
+        let start = Instant::now();
+        let result = self.call_inner(args).await;
+        let took_ms = Instant::now().saturating_duration_since(start).as_millis();
+
+        let status = if result.is_ok() { "✓" } else { "❌" };
+        println!("{} (took {} ms)", status, took_ms);
+
+        result
+    }
+}
+
+impl RunCmdTool {
+    async fn call_inner(&self, args: RunCmdArgs) -> Result<RunCmdResponse, RunCmdError> {
         if args.command.trim().is_empty() {
             return Err(RunCmdError::CmdIsEmpty);
         }
@@ -126,13 +144,13 @@ mod tests {
     #[tokio::test]
     async fn output_of_a_successful_command_is_returned() -> anyhow::Result<()> {
         // GIVEN
-        let tool = RunCmd;
+        let tool = RunCmdTool;
         let args = RunCmdArgs {
             command: "cat src/tools/testdata/sample.txt".to_string(),
         };
 
         // WHEN
-        let result = tool.call(args).await?;
+        let result = tool.call_inner(args).await?;
 
         // THEN
         assert_yaml_snapshot!(result, @r#"
@@ -148,13 +166,13 @@ mod tests {
     #[tokio::test]
     async fn output_of_a_failing_command_is_returned() -> anyhow::Result<()> {
         // GIVEN
-        let tool = RunCmd;
+        let tool = RunCmdTool;
         let args = RunCmdArgs {
             command: r#"echo "something went wrong" >&2; false"#.to_string(),
         };
 
         // WHEN
-        let result = tool.call(args).await?;
+        let result = tool.call_inner(args).await?;
 
         // THEN
         assert_yaml_snapshot!(result, @r#"
@@ -170,13 +188,13 @@ mod tests {
     #[tokio::test]
     async fn command_with_pipes_can_be_run() -> anyhow::Result<()> {
         // GIVEN
-        let tool = RunCmd;
+        let tool = RunCmdTool;
         let args = RunCmdArgs {
             command: "cat src/tools/testdata/sample.txt | grep '#' | wc -l | xargs".to_string(),
         };
 
         // WHEN
-        let result = tool.call(args).await?;
+        let result = tool.call_inner(args).await?;
 
         // THEN
         assert_yaml_snapshot!(result, @r#"
@@ -196,14 +214,14 @@ mod tests {
     #[tokio::test]
     async fn running_empty_command_fails() {
         // GIVEN
-        let tool = RunCmd;
+        let tool = RunCmdTool;
         let args = RunCmdArgs {
             command: "".to_string(),
         };
 
         // WHEN
         let result = tool
-            .call(args)
+            .call_inner(args)
             .await
             .expect_err("result should've been an error");
 
@@ -214,14 +232,14 @@ mod tests {
     #[tokio::test]
     async fn command_with_blocked_pattern_is_rejected() {
         // GIVEN
-        let tool = RunCmd;
+        let tool = RunCmdTool;
         let args = RunCmdArgs {
             command: "curl http://127.0.0.1:9999".to_string(),
         };
 
         // WHEN
         let result = tool
-            .call(args)
+            .call_inner(args)
             .await
             .expect_err("result should've been an error");
 

@@ -1,4 +1,5 @@
 use crate::helpers::is_path_in_workspace;
+use colored::Colorize;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::{Deserialize, Serialize};
@@ -36,7 +37,7 @@ pub enum EditFileError {
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct EditFile;
+pub struct EditFileTool;
 
 #[derive(Debug, Serialize)]
 pub struct EditFileResponse {
@@ -44,7 +45,7 @@ pub struct EditFileResponse {
     num_bytes_written: usize,
 }
 
-impl Tool for EditFile {
+impl Tool for EditFileTool {
     const NAME: &'static str = "edit_file";
     type Error = EditFileError;
     type Args = EditFileArgs;
@@ -77,6 +78,17 @@ impl Tool for EditFile {
 
     #[instrument(level = Level::TRACE, name = "tool-call: edit_file", ret, err(level = Level::ERROR), skip(self))]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        let log = format!("edited file ({})", args.path).cyan();
+        let result = self.call_inner(args).await;
+        let status = if result.is_ok() { "✓" } else { "❌" };
+        println!("{} {}", log, status,);
+
+        result
+    }
+}
+
+impl EditFileTool {
+    async fn call_inner(&self, args: EditFileArgs) -> Result<EditFileResponse, EditFileError> {
         if args.path.is_empty() {
             // TODO: encode this in the type system
             return Err(EditFileError::InvalidInput(

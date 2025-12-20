@@ -3,7 +3,7 @@ use crate::env::{get_env_var, get_optional_env_var};
 use crate::helpers::path_to_dirname;
 use crate::providers::copilot;
 use crate::session::Session;
-use crate::tools::{CreateFile, EditFile, ReadDir, ReadFile, RunCmd};
+use crate::tools::{CreateFileTool, EditFileTool, ReadDirTool, ReadFileTool, RunCmdTool};
 use anyhow::Context;
 use rig::client::{Client, CompletionClient};
 use rig::providers::anthropic::client::AnthropicExt;
@@ -48,14 +48,14 @@ pub async fn run() -> anyhow::Result<()> {
             let agent = client
                 .agent(&model_name)
                 .preamble(SYSTEM_PROMPT)
-                .tool(CreateFile)
-                .tool(EditFile)
-                .tool(ReadDir)
-                .tool(ReadFile)
-                .tool(RunCmd)
+                .tool(CreateFileTool)
+                .tool(EditFileTool)
+                .tool(ReadDirTool)
+                .tool(ReadFileTool)
+                .tool(RunCmdTool)
                 .build();
 
-            let mut session = Session::new(agent, project_log_dir, provider, &model_name);
+            let mut session = Session::new(agent, cwd, project_log_dir, provider, &model_name);
             session.run().await?;
         }
         Provider::Openrouter => {
@@ -68,14 +68,14 @@ pub async fn run() -> anyhow::Result<()> {
             let agent = client
                 .agent(&model_name)
                 .preamble(SYSTEM_PROMPT)
-                .tool(CreateFile)
-                .tool(EditFile)
-                .tool(ReadDir)
-                .tool(ReadFile)
-                .tool(RunCmd)
+                .tool(CreateFileTool)
+                .tool(EditFileTool)
+                .tool(ReadDirTool)
+                .tool(ReadFileTool)
+                .tool(RunCmdTool)
                 .build();
 
-            let mut session = Session::new(agent, project_log_dir, provider, &model_name);
+            let mut session = Session::new(agent, cwd, project_log_dir, provider, &model_name);
             session.run().await?;
         }
         Provider::Anthropic => {
@@ -89,14 +89,14 @@ pub async fn run() -> anyhow::Result<()> {
                 .agent(&model_name)
                 .preamble(SYSTEM_PROMPT)
                 .max_tokens(50000)
-                .tool(CreateFile)
-                .tool(EditFile)
-                .tool(ReadDir)
-                .tool(ReadFile)
-                .tool(RunCmd)
+                .tool(CreateFileTool)
+                .tool(EditFileTool)
+                .tool(ReadDirTool)
+                .tool(ReadFileTool)
+                .tool(RunCmdTool)
                 .build();
 
-            let mut session = Session::new(agent, project_log_dir, provider, &model_name);
+            let mut session = Session::new(agent, cwd, project_log_dir, provider, &model_name);
             session.run().await?;
         }
         Provider::GitHubCopilot => {
@@ -124,14 +124,14 @@ pub async fn run() -> anyhow::Result<()> {
             let agent = client
                 .agent(&model_name)
                 .preamble(SYSTEM_PROMPT)
-                .tool(CreateFile)
-                .tool(EditFile)
-                .tool(ReadDir)
-                .tool(ReadFile)
-                .tool(RunCmd)
+                .tool(CreateFileTool)
+                .tool(EditFileTool)
+                .tool(ReadDirTool)
+                .tool(ReadFileTool)
+                .tool(RunCmdTool)
                 .build();
 
-            let mut session = Session::new(agent, project_log_dir, provider, &model_name);
+            let mut session = Session::new(agent, cwd, project_log_dir, provider, &model_name);
             session.run().await?;
         }
     }
