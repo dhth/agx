@@ -100,24 +100,26 @@ pub async fn run() -> anyhow::Result<()> {
             session.run().await?;
         }
         Provider::GitHubCopilot => {
-            let http_client = reqwest::Client::builder()
-                .default_headers(copilot::get_headers())
-                .build()
-                .context("couldn't build http client for copilot API calls")?;
+            let client: Client<OpenAICompletionsExt> = {
+                let http_client = reqwest::Client::builder()
+                    .default_headers(copilot::get_headers())
+                    .build()
+                    .context("couldn't build http client for copilot API calls")?;
 
-            let copilot_auth = copilot::get_auth_token(&http_client, &api_key)
-                .await
-                .context("couldn't get a short lived GitHub Copilot token")?;
+                let copilot_auth = copilot::get_auth_token(&http_client, &api_key)
+                    .await
+                    .context("couldn't get a short lived GitHub Copilot token")?;
 
-            let builder = openai::Client::<reqwest::Client>::builder()
-                .base_url(&copilot_auth.endpoints.api)
-                .api_key(&copilot_auth.token)
-                .http_client(http_client);
+                let builder = openai::Client::<reqwest::Client>::builder()
+                    .base_url(&copilot_auth.endpoints.api)
+                    .api_key(&copilot_auth.token)
+                    .http_client(http_client);
 
-            let client: Client<OpenAICompletionsExt> = builder
-                .build()
-                .context("couldn't build client")?
-                .completions_api(); // This is to maintain consistency with the other clients
+                builder
+                    .build()
+                    .context("couldn't build client")?
+                    .completions_api() // This is to maintain consistency with the other clients
+            };
 
             let agent = client
                 .agent(&model_name)
