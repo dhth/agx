@@ -1,6 +1,6 @@
 use crate::domain::Provider;
 use crate::env::{get_env_var, get_optional_env_var};
-use crate::helpers::path_to_dirname;
+use crate::helpers::{get_project_context, path_to_dirname};
 use crate::providers::copilot;
 use crate::session::Session;
 use crate::tools::{CreateFileTool, EditFileTool, ReadDirTool, ReadFileTool, RunCmdTool};
@@ -11,6 +11,7 @@ use rig::providers::gemini::client::GeminiExt;
 use rig::providers::openai::OpenAICompletionsExt;
 use rig::providers::openrouter::client::OpenRouterExt;
 use rig::providers::{anthropic, gemini, openai, openrouter};
+use std::borrow::Cow;
 use std::str::FromStr;
 
 const SYSTEM_PROMPT: &str = include_str!("assets/system-prompt.txt");
@@ -28,6 +29,19 @@ pub async fn run() -> anyhow::Result<()> {
     let cwd = std::env::current_dir().context("couldnt' determine current working directory")?;
     let agx_log_dir = crate::telemetry::get_log_dir(&xdg);
     let project_log_dir = agx_log_dir.join("projects").join(path_to_dirname(&cwd));
+
+    let system_prompt = match get_project_context().await? {
+        Some(p) => Cow::Owned(format!(
+            "{}
+
+The following is context specific to this project:
+
+{}",
+            SYSTEM_PROMPT, p
+        )),
+        None => Cow::Borrowed(SYSTEM_PROMPT),
+    };
+
     tokio::fs::create_dir_all(&project_log_dir)
         .await
         .with_context(|| {
@@ -47,7 +61,7 @@ pub async fn run() -> anyhow::Result<()> {
 
             let agent = client
                 .agent(&model_name)
-                .preamble(SYSTEM_PROMPT)
+                .preamble(&system_prompt)
                 .tool(CreateFileTool)
                 .tool(EditFileTool)
                 .tool(ReadDirTool)
@@ -67,7 +81,7 @@ pub async fn run() -> anyhow::Result<()> {
 
             let agent = client
                 .agent(&model_name)
-                .preamble(SYSTEM_PROMPT)
+                .preamble(&system_prompt)
                 .tool(CreateFileTool)
                 .tool(EditFileTool)
                 .tool(ReadDirTool)
@@ -87,7 +101,7 @@ pub async fn run() -> anyhow::Result<()> {
 
             let agent = client
                 .agent(&model_name)
-                .preamble(SYSTEM_PROMPT)
+                .preamble(&system_prompt)
                 .max_tokens(50000)
                 .tool(CreateFileTool)
                 .tool(EditFileTool)
@@ -123,7 +137,7 @@ pub async fn run() -> anyhow::Result<()> {
 
             let agent = client
                 .agent(&model_name)
-                .preamble(SYSTEM_PROMPT)
+                .preamble(&system_prompt)
                 .tool(CreateFileTool)
                 .tool(EditFileTool)
                 .tool(ReadDirTool)

@@ -145,6 +145,7 @@ where
                                             self.chat_history
                                                 .push(Message::assistant(&response_text));
                                             response_text.clear();
+                                            println!();
                                         }
 
                                         self.chat_history.push(Message::Assistant {
