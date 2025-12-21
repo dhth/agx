@@ -1,0 +1,11 @@
+services:
+  dev:
+    build: .
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    env_file: "../.env"
+    volumes:
+      - ..:/workspace
+      - ../target/x86_64-unknown-linux-musl/debug/agx:/workspace/agx:ro
+      - /workspace/target # mask the target directory

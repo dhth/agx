@@ -13,7 +13,7 @@ alias r := run
 alias re := review
 alias t := test
 
-default:
+@default:
     just --choose
 
 aud:
@@ -21,6 +21,13 @@ aud:
 
 build:
     cargo build
+
+build-linux:
+    @if ! command -v cargo-zigbuild &> /dev/null; then \
+        echo "Error: cargo-zigbuild not found. Install it with: cargo install cargo-zigbuild" >&2; \
+        exit 1; \
+    fi
+    cargo zigbuild --target x86_64-unknown-linux-musl
 
 check:
     cargo check --all-targets
@@ -54,6 +61,17 @@ test:
 
 tail-logs:
     tail -n 100 ~/.local/state/agx/agx.log
+
+docker-up:
+    @if [ ! -f "target/x86_64-unknown-linux-musl/debug/agx" ]; then \
+        echo "Error: linux binary not found. Run 'just build-linux' first" >&2; \
+        exit 1; \
+    fi
+    cd local && docker compose up -d
+
+[working-directory: 'local']
+docker-down:
+    docker compose down
 
 all:
     cargo check --all-targets
