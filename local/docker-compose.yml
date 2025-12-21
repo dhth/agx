@@ -4,8 +4,10 @@ services:
     working_dir: /workspace
     stdin_open: true
     tty: true
-    env_file: "../.env"
+    env_file:
+      - path: ../.env
+        required: false
     volumes:
       - ..:/workspace
-      - ../target/x86_64-unknown-linux-musl/debug/agx:/workspace/agx:ro
+      - ../target/x86_64-unknown-linux-musl/debug/agx:/usr/local/bin/agx:ro
       - /workspace/target # mask the target directory

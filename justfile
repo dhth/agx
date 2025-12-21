@@ -51,10 +51,10 @@ lint-fix:
     cargo clippy --fix  --allow-dirty --allow-staged
 
 run *FLAGS:
-    cargo run -- {{FLAGS}}
+    cargo run -- {{ FLAGS }}
 
 review *FLAGS:
-    cargo insta test --review {{FLAGS}}
+    cargo insta test --review {{ FLAGS }}
 
 test:
     cargo test
@@ -69,7 +69,11 @@ docker-up:
     fi
     cd local && docker compose up -d
 
-[working-directory: 'local']
+[working-directory('local')]
+docker-shell:
+    docker compose exec dev /usr/bin/env bash
+
+[working-directory('local')]
 docker-down:
     docker compose down
 
