@@ -16,10 +16,12 @@ pub async fn get_project_context() -> anyhow::Result<Option<String>> {
             }
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(e).context("couldn't determine metadata for AGENTS.md file"),
+        Err(e) => return Err(e).context("couldn't determine metadata for AGENTS.md"),
     };
 
-    let contents = tokio::fs::read_to_string(AGENTS_CONTEXT_FILE).await?;
+    let contents = tokio::fs::read_to_string(AGENTS_CONTEXT_FILE)
+        .await
+        .with_context(|| "couldn't read AGENTS.md")?;
 
     Ok(Some(contents))
 }
