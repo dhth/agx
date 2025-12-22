@@ -1,15 +1,18 @@
+mod hitl;
+
 use crate::domain::Provider;
 use anyhow::Context;
 use chrono::Local;
 use colored::Colorize;
 use futures::StreamExt;
+use hitl::Hitl;
 use rig::OneOrMany;
 use rig::agent::{Agent, MultiTurnStreamItem};
 use rig::completion::CompletionModel;
 use rig::message::{AssistantContent, Message, UserContent};
 use rig::streaming::{StreamedAssistantContent, StreamedUserContent, StreamingPrompt};
 use std::path::PathBuf;
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 const BANNER: &str = include_str!("assets/logo.txt");
 const COMMANDS: &str = include_str!("assets/commands.txt");
@@ -25,6 +28,7 @@ where
     model_name: String,
     loop_count: usize,
     chat_history: Vec<Message>,
+    hitl: Hitl,
 }
 
 impl<M> Session<M>
@@ -46,6 +50,7 @@ where
             model_name: model_name.into(),
             loop_count: 0,
             chat_history: Vec::new(),
+            hitl: Hitl::default(),
         }
     }
 
@@ -77,6 +82,8 @@ where
             format!("[{}/{}]", &self.provider, &self.model_name).yellow(),
             self.project_dir.to_string_lossy().blue(),
         );
+        let mut pending_query = None;
+
         loop {
             let prefix = if print_newline_before_prompt {
                 "\n"
@@ -85,9 +92,13 @@ where
                 ""
             };
             println!("{}{}", prefix, metadata);
-            let query = editor
-                .readline(&prompt_marker)
-                .context("couldn't read input")?;
+            let query = if let Some(q) = pending_query.take() {
+                q
+            } else {
+                editor
+                    .readline(&prompt_marker)
+                    .context("couldn't read input")?
+            };
 
             match query.trim() {
                 "" => {}
@@ -123,6 +134,7 @@ where
                         .agent
                         .stream_prompt(q)
                         .multi_turn(30)
+                        .with_hook(self.hitl.clone())
                         .with_history(self.chat_history.clone())
                         .await;
 
@@ -226,8 +238,34 @@ where
                                 );
                             }
                             Err(e) => {
-                                debug!(loop_index = self.loop_count, stream_index, kind="Err", error = %e, "stream item received");
-                                print_error(anyhow::anyhow!(e));
+                                // TODO: ugly hack for now. proper error handling will require rig
+                                // exporting agent::prompt_request::streaming::StreamingError
+                                if e.to_string().contains("PromptCancelled") {
+                                    if let Some(Message::Assistant { content, .. }) =
+                                        self.chat_history.last()
+                                        && let AssistantContent::ToolCall(_) = content.first()
+                                    {
+                                        self.chat_history.pop();
+
+                                        pending_query = self.hitl.take_feedback();
+                                        let feedback_text = match &pending_query {
+                                            Some(feedback) => {
+                                                info!(loop_index = self.loop_count, err=%e, feedback, "user cancelled prompt loop and provided feedback");
+                                                "tool call cancelled; continuing with your feedback"
+                                            }
+                                            None => {
+                                                info!(loop_index = self.loop_count, err=%e, "user cancelled prompt loop");
+                                                "tool call cancelled"
+                                            }
+                                        };
+                                        println!("{}", feedback_text.red());
+                                    }
+
+                                    print_newline_before_prompt = false;
+                                } else {
+                                    debug!(loop_index = self.loop_count, stream_index, kind="Err", error = %e, "stream item received");
+                                    print_error(anyhow::anyhow!(e));
+                                }
                                 break;
                             }
                         }

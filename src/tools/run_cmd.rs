@@ -38,6 +38,12 @@ pub struct RunCmdArgs {
     command: String,
 }
 
+impl std::fmt::Display for RunCmdArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, r#"command="{}""#, self.command,)
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum RunCmdError {
     #[error("command is empty")]

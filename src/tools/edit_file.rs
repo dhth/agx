@@ -14,6 +14,12 @@ pub struct EditFileArgs {
     new_str: String,
 }
 
+impl std::fmt::Display for EditFileArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "path={}", self.path,)
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum EditFileError {
     #[error("invalid input provided: {0}")]
