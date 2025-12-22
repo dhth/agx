@@ -1,8 +1,11 @@
+mod hitl;
+
 use crate::domain::Provider;
 use anyhow::Context;
 use chrono::Local;
 use colored::Colorize;
 use futures::StreamExt;
+use hitl::Hitl;
 use rig::OneOrMany;
 use rig::agent::{Agent, MultiTurnStreamItem};
 use rig::completion::CompletionModel;
@@ -123,6 +126,7 @@ where
                         .agent
                         .stream_prompt(q)
                         .multi_turn(30)
+                        .with_hook(Hitl)
                         .with_history(self.chat_history.clone())
                         .await;
 
@@ -226,8 +230,31 @@ where
                                 );
                             }
                             Err(e) => {
-                                debug!(loop_index = self.loop_count, stream_index, kind="Err", error = %e, "stream item received");
-                                print_error(anyhow::anyhow!(e));
+                                // TODO: ugly hack for now. proper error handling will require rig
+                                // exporting agent::prompt_request::streaming::StreamingError
+                                if e.to_string().contains("PromptCancelled") {
+                                    error!(loop_index = self.loop_count, err=%e, "user cancelled prompt loop");
+                                    // Until agent::prompt_request::streaming::StreamingError is
+                                    // exported, the tool call inserted in the chat history needs
+                                    // to be cleaned up as subsequent calls will require the
+                                    // results for it. Once the error is exported, we can perhaps
+                                    // do smarter things like, add a tool result corresponding to
+                                    // the tool call saying "the user cancelled the tool call" and
+                                    // even ask the user for an alternative
+                                    if let Some(Message::Assistant { content, .. }) =
+                                        self.chat_history.last()
+                                    {
+                                        if matches!(content.first(), AssistantContent::ToolCall(_))
+                                        {
+                                            self.chat_history.pop();
+                                        }
+                                    }
+                                    println!("{}", "cancelled".red());
+                                    print_newline_before_prompt = false;
+                                } else {
+                                    debug!(loop_index = self.loop_count, stream_index, kind="Err", error = %e, "stream item received");
+                                    print_error(anyhow::anyhow!(e));
+                                }
                                 break;
                             }
                         }
