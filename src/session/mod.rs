@@ -12,7 +12,7 @@ use rig::completion::CompletionModel;
 use rig::message::{AssistantContent, Message, UserContent};
 use rig::streaming::{StreamedAssistantContent, StreamedUserContent, StreamingPrompt};
 use std::path::PathBuf;
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 const BANNER: &str = include_str!("assets/logo.txt");
 const COMMANDS: &str = include_str!("assets/commands.txt");
@@ -250,11 +250,11 @@ where
                                         pending_query = self.hitl.take_feedback();
                                         let feedback_text = match &pending_query {
                                             Some(feedback) => {
-                                                error!(loop_index = self.loop_count, err=%e, feedback, "user cancelled prompt loop and provided feedback");
+                                                info!(loop_index = self.loop_count, err=%e, feedback, "user cancelled prompt loop and provided feedback");
                                                 "tool call cancelled; continuing with your feedback"
                                             }
                                             None => {
-                                                error!(loop_index = self.loop_count, err=%e, "user cancelled prompt loop");
+                                                info!(loop_index = self.loop_count, err=%e, "user cancelled prompt loop");
                                                 "tool call cancelled"
                                             }
                                         };

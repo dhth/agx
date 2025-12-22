@@ -1,5 +1,7 @@
-use super::{CreateFileArgs, CreateFileTool, EditFileTool, ReadDirArgs, ReadDirTool, RunCmdTool};
-use crate::tools::RunCmdArgs;
+use super::{
+    CreateFileArgs, CreateFileTool, EditFileArgs, EditFileTool, ReadDirArgs, ReadDirTool,
+    RunCmdArgs, RunCmdTool,
+};
 use rig::tool::Tool;
 
 pub fn get_tool_repr(tool_name: &str, args: &str) -> String {
@@ -8,7 +10,7 @@ pub fn get_tool_repr(tool_name: &str, args: &str) -> String {
             Ok(a) => Some(a.to_string()),
             Err(_) => None,
         },
-        EditFileTool::NAME => match serde_json::from_str::<ReadDirArgs>(args) {
+        EditFileTool::NAME => match serde_json::from_str::<EditFileArgs>(args) {
             Ok(a) => Some(a.to_string()),
             Err(_) => None,
         },

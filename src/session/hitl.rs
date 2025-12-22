@@ -39,7 +39,7 @@ where
         );
 
         print!(
-            "press enter to proceed, type 'n' to reject, or type your feedback if you want things to be done differently: "
+            "press enter to proceed, type 'n/no' to reject, or type your feedback if you want things to be done differently: "
         );
         let _ = std::io::stdout().flush();
 
@@ -50,7 +50,7 @@ where
                 return;
             }
 
-            if trimmed != "n"
+            if (!trimmed.eq_ignore_ascii_case("n") && !trimmed.eq_ignore_ascii_case("no"))
                 && let Ok(mut guard) = self.feedback.lock()
             {
                 *guard = Some(trimmed.to_string());
