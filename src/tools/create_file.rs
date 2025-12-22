@@ -9,8 +9,19 @@ use tracing::{Level, instrument};
 
 #[derive(Debug, Deserialize)]
 pub struct CreateFileArgs {
-    path: String,
-    contents: String,
+    pub path: String,
+    pub contents: String,
+}
+
+impl std::fmt::Display for CreateFileArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "path={}, num_lines={}",
+            self.path,
+            self.contents.lines().count()
+        )
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
