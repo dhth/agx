@@ -7,9 +7,9 @@ use colored::Colorize;
 use futures::StreamExt;
 use hitl::Hitl;
 use rig::OneOrMany;
-use rig::agent::{Agent, MultiTurnStreamItem};
+use rig::agent::{Agent, MultiTurnStreamItem, Text};
 use rig::completion::CompletionModel;
-use rig::message::{AssistantContent, Message, UserContent};
+use rig::message::{AssistantContent, Message, ToolResult, ToolResultContent, UserContent};
 use rig::streaming::{StreamedAssistantContent, StreamedUserContent, StreamingPrompt};
 use std::path::PathBuf;
 use tracing::{debug, error};
@@ -80,6 +80,7 @@ where
             format!("[{}/{}]", &self.provider, &self.model_name).yellow(),
             self.project_dir.to_string_lossy().blue(),
         );
+
         loop {
             let prefix = if print_newline_before_prompt {
                 "\n"
@@ -234,20 +235,26 @@ where
                                 // exporting agent::prompt_request::streaming::StreamingError
                                 if e.to_string().contains("PromptCancelled") {
                                     error!(loop_index = self.loop_count, err=%e, "user cancelled prompt loop");
-                                    // Until agent::prompt_request::streaming::StreamingError is
-                                    // exported, the tool call inserted in the chat history needs
-                                    // to be cleaned up as subsequent calls will require the
-                                    // results for it. Once the error is exported, we can perhaps
-                                    // do smarter things like, add a tool result corresponding to
-                                    // the tool call saying "the user cancelled the tool call" and
-                                    // even ask the user for an alternative
                                     if let Some(Message::Assistant { content, .. }) =
                                         self.chat_history.last()
+                                        && let AssistantContent::ToolCall(tool_call) =
+                                            content.first()
                                     {
-                                        if matches!(content.first(), AssistantContent::ToolCall(_))
-                                        {
-                                            self.chat_history.pop();
-                                        }
+                                        self.chat_history.push(Message::User {
+                                            content: OneOrMany::one(UserContent::ToolResult(
+                                                ToolResult {
+                                                    id: tool_call.id,
+                                                    call_id: tool_call.call_id,
+                                                    content: OneOrMany::one(
+                                                        ToolResultContent::Text(Text {
+                                                            text:
+                                                                "the user cancelled this tool call"
+                                                                    .to_string(),
+                                                        }),
+                                                    ),
+                                                },
+                                            )),
+                                        });
                                     }
                                     println!("{}", "cancelled".red());
                                     print_newline_before_prompt = false;
