@@ -199,17 +199,8 @@ impl Diff {
     }
 }
 
-fn num_digits(mut n: usize) -> usize {
-    if n == 0 {
-        1
-    } else {
-        let mut digits = 0;
-        while n > 0 {
-            n /= 10;
-            digits += 1;
-        }
-        digits
-    }
+fn num_digits(n: usize) -> usize {
+    n.checked_ilog10().map_or(1, |d| d + 1) as usize
 }
 
 #[cfg(test)]
