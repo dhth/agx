@@ -115,7 +115,11 @@ impl Diff {
         max(num_digits(largest_line_num) + 2, 4)
     }
 
-    pub fn to_output(&self, color: bool) -> String {
+    pub fn get_terminal_output(&self) -> String {
+        self.get_output(true)
+    }
+
+    fn get_output(&self, color: bool) -> String {
         if self.hunks.is_empty() {
             return String::new();
         }
@@ -159,7 +163,6 @@ impl Diff {
                         format!("{}{}|{}", old_line_styled, new_line_styled, sign_styled);
 
                     for inline_change in &diff_line.inline_changes {
-                        // Strip newlines from inline changes as they'll be added by join()
                         let value = inline_change.value.trim_end_matches('\n');
                         let formatted_value = if inline_change.emphasized {
                             if let Some(c) = line_color {
@@ -180,7 +183,6 @@ impl Diff {
                     let mut line_spans = vec![old_line, new_line, format!("|{sign}")];
 
                     for inline_change in &diff_line.inline_changes {
-                        // Strip newlines from inline changes as they'll be added by join()
                         let value = inline_change.value.trim_end_matches('\n');
                         if inline_change.emphasized {
                             line_spans.push(format!("⸢{}⸣", value));
@@ -236,7 +238,7 @@ line 2
 
         // WHEN
         // THEN
-        assert_snapshot!(diff.to_output(false), @r"
+        assert_snapshot!(diff.get_output(false), @r"
         1   1   | 
         2       |-line 1
             2   |+line 1⸢ (changed)⸣
@@ -278,7 +280,7 @@ line 8
 
         // WHEN
         // THEN
-        assert_snapshot!(diff.to_output(false), @r"
+        assert_snapshot!(diff.get_output(false), @r"
         1   1   | 
         2       |-line 1
             2   |+line 1⸢ (changed)⸣
@@ -314,7 +316,7 @@ line 8
 
         // WHEN
         // THEN
-        assert_snapshot!(diff.to_output(false), @r"
+        assert_snapshot!(diff.get_output(false), @r"
         6      6      | line 6
         7      7      | line 7
         8      8      | line 8

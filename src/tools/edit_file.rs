@@ -109,7 +109,7 @@ impl Tool for EditFileTool {
         if let Ok(output) = &result
             && let Some(diff) = Diff::new(&output.old_contents, &output.new_contents)
         {
-            println!("{}", diff.to_output(true));
+            println!("{}", diff.get_terminal_output());
         }
 
         result.map(|o| o.into())
