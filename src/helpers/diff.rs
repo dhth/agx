@@ -1,8 +1,7 @@
-use std::cmp::max;
-use std::fmt::Display;
-
+use console::{Color, style};
 use similar::ChangeTag;
 use similar::TextDiff;
+use std::cmp::max;
 
 #[derive(Clone, Debug)]
 pub struct Diff {
@@ -115,21 +114,18 @@ impl Diff {
 
         max(num_digits(largest_line_num) + 2, 4)
     }
-}
 
-impl Display for Diff {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    pub fn to_output(&self, color: bool) -> String {
         if self.hunks.is_empty() {
-            return Ok(());
+            return String::new();
         }
 
         let line_number_padding = self.line_num_padding();
-
         let mut lines = Vec::new();
 
         for (idx, hunk) in self.hunks.iter().enumerate() {
             if idx > 0 {
-                lines.push(format!("{:-^80}\n", "-"));
+                lines.push(format!("{:-^80}", "-"));
             }
 
             for diff_line in &hunk.lines {
@@ -144,21 +140,61 @@ impl Display for Diff {
                     .map(|n| format!("{:<padding$}", n + 1, padding = line_number_padding))
                     .unwrap_or_else(|| " ".repeat(line_number_padding));
 
-                let mut line_spans = vec![old_line, new_line, format!("|{sign}")];
+                if color {
+                    let (line_color, sign_str) = match diff_line.kind {
+                        DiffOperation::Delete => (Some(Color::Red), sign.clone()),
+                        DiffOperation::Insert => (Some(Color::Green), sign.clone()),
+                        DiffOperation::Equal => (None, sign.clone()),
+                    };
 
-                for inline_change in &diff_line.inline_changes {
-                    if inline_change.emphasized {
-                        line_spans.push(format!("⸢{}⸣", inline_change.value));
+                    let old_line_styled = style(old_line.clone()).dim().to_string();
+                    let new_line_styled = style(new_line.clone()).dim().to_string();
+                    let sign_styled = if let Some(c) = line_color {
+                        style(&sign_str).fg(c).bold().to_string()
                     } else {
-                        line_spans.push(inline_change.value.clone());
-                    }
-                }
+                        sign_str
+                    };
 
-                lines.push(line_spans.join(""));
+                    let mut line_content =
+                        format!("{}{}|{}", old_line_styled, new_line_styled, sign_styled);
+
+                    for inline_change in &diff_line.inline_changes {
+                        // Strip newlines from inline changes as they'll be added by join()
+                        let value = inline_change.value.trim_end_matches('\n');
+                        let formatted_value = if inline_change.emphasized {
+                            if let Some(c) = line_color {
+                                style(value).fg(c).underlined().on_black().to_string()
+                            } else {
+                                style(value).underlined().on_black().to_string()
+                            }
+                        } else if let Some(c) = line_color {
+                            style(value).fg(c).to_string()
+                        } else {
+                            value.to_string()
+                        };
+                        line_content.push_str(&formatted_value);
+                    }
+
+                    lines.push(line_content);
+                } else {
+                    let mut line_spans = vec![old_line, new_line, format!("|{sign}")];
+
+                    for inline_change in &diff_line.inline_changes {
+                        // Strip newlines from inline changes as they'll be added by join()
+                        let value = inline_change.value.trim_end_matches('\n');
+                        if inline_change.emphasized {
+                            line_spans.push(format!("⸢{}⸣", value));
+                        } else {
+                            line_spans.push(value.to_string());
+                        }
+                    }
+
+                    lines.push(line_spans.join(""));
+                }
             }
         }
 
-        f.write_str(&lines.join(""))
+        lines.join("\n")
     }
 }
 
@@ -200,7 +236,7 @@ line 2
 
         // WHEN
         // THEN
-        assert_snapshot!(diff, @r"
+        assert_snapshot!(diff.to_output(false), @r"
         1   1   | 
         2       |-line 1
             2   |+line 1⸢ (changed)⸣
@@ -242,7 +278,7 @@ line 8
 
         // WHEN
         // THEN
-        assert_snapshot!(diff, @r"
+        assert_snapshot!(diff.to_output(false), @r"
         1   1   | 
         2       |-line 1
             2   |+line 1⸢ (changed)⸣
@@ -278,7 +314,7 @@ line 8
 
         // WHEN
         // THEN
-        assert_snapshot!(diff, @r"
+        assert_snapshot!(diff.to_output(false), @r"
         6      6      | line 6
         7      7      | line 7
         8      8      | line 8
