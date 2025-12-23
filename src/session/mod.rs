@@ -173,6 +173,8 @@ where
                         self.chat_history.pop();
                     }
                     self.print_newline_before_prompt = false;
+                    // TODO: this cancellation signal needs to be propagated to any ongoing tool
+                    // call execution
                     break;
                 }
                 maybe_item = stream.next() => {
@@ -282,7 +284,7 @@ where
                                             self.pending_prompt = self.hitl.take_feedback();
                                             let feedback_text = match &self.pending_prompt {
                                                 Some(feedback) => {
-                                                    info!(loop_index = self.loop_count, err=%e, feedback, "user cancelled tool calland provided feedback");
+                                                    info!(loop_index = self.loop_count, err=%e, feedback, "user cancelled tool call and provided feedback");
                                                     "tool call cancelled; continuing with your feedback"
                                                 }
                                                 None => {
