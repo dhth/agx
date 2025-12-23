@@ -35,13 +35,12 @@ pub enum DiffOperation {
 }
 
 impl DiffOperation {
-    pub fn sign(&self) -> String {
+    pub fn sign(&self) -> &'static str {
         match self {
             DiffOperation::Delete => "-",
             DiffOperation::Insert => "+",
             DiffOperation::Equal => " ",
         }
-        .to_string()
     }
 }
 
@@ -146,9 +145,9 @@ impl Diff {
 
                 if color {
                     let (line_color, sign_str) = match diff_line.kind {
-                        DiffOperation::Delete => (Some(Color::Red), sign.clone()),
-                        DiffOperation::Insert => (Some(Color::Green), sign.clone()),
-                        DiffOperation::Equal => (None, sign.clone()),
+                        DiffOperation::Delete => (Some(Color::Red), sign),
+                        DiffOperation::Insert => (Some(Color::Green), sign),
+                        DiffOperation::Equal => (None, sign),
                     };
 
                     let old_line_styled = style(old_line.clone()).dim().to_string();
@@ -156,7 +155,7 @@ impl Diff {
                     let sign_styled = if let Some(c) = line_color {
                         style(&sign_str).fg(c).bold().to_string()
                     } else {
-                        sign_str
+                        sign_str.to_string()
                     };
 
                     let mut line_content =
