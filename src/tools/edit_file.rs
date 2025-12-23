@@ -1,4 +1,4 @@
-use crate::helpers::is_path_in_workspace;
+use crate::helpers::{Diff, is_path_in_workspace};
 use colored::Colorize;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
@@ -9,9 +9,9 @@ use tracing::{Level, instrument};
 
 #[derive(Debug, Deserialize)]
 pub struct EditFileArgs {
-    path: String,
-    old_str: String,
-    new_str: String,
+    pub path: String,
+    pub old_str: String,
+    pub new_str: String,
 }
 
 impl std::fmt::Display for EditFileArgs {
@@ -45,10 +45,27 @@ pub enum EditFileError {
 #[derive(Deserialize, Serialize)]
 pub struct EditFileTool;
 
+#[derive(Debug)]
+struct EditFileOutputInner {
+    path: String,
+    num_bytes_written: usize,
+    old_contents: String,
+    new_contents: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct EditFileResponse {
     path: String,
     num_bytes_written: usize,
+}
+
+impl From<EditFileOutputInner> for EditFileResponse {
+    fn from(value: EditFileOutputInner) -> Self {
+        Self {
+            path: value.path,
+            num_bytes_written: value.num_bytes_written,
+        }
+    }
 }
 
 impl Tool for EditFileTool {
@@ -89,12 +106,18 @@ impl Tool for EditFileTool {
         let status = if result.is_ok() { "✓" } else { "❌" };
         println!("{} {}", log, status,);
 
-        result
+        if let Ok(output) = &result
+            && let Some(diff) = Diff::new(&output.old_contents, &output.new_contents)
+        {
+            println!("{}", diff.get_terminal_output());
+        }
+
+        result.map(|o| o.into())
     }
 }
 
 impl EditFileTool {
-    async fn call_inner(&self, args: EditFileArgs) -> Result<EditFileResponse, EditFileError> {
+    async fn call_inner(&self, args: EditFileArgs) -> Result<EditFileOutputInner, EditFileError> {
         if args.path.is_empty() {
             // TODO: encode this in the type system
             return Err(EditFileError::InvalidInput(
@@ -146,9 +169,11 @@ impl EditFileTool {
             .await
             .map_err(EditFileError::CouldntWriteToFile)?;
 
-        Ok(EditFileResponse {
+        Ok(EditFileOutputInner {
             path: path.to_string_lossy().to_string(),
             num_bytes_written: new_contents.len(),
+            old_contents,
+            new_contents,
         })
     }
 }
