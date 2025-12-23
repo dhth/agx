@@ -161,131 +161,155 @@ where
         let mut response_text = String::new();
 
         let mut stream_index = 0;
-        while let Some(item) = stream.next().await {
-            match item {
-                Ok(rig::agent::MultiTurnStreamItem::StreamAssistantItem(content)) => {
-                    match content {
-                        StreamedAssistantContent::Text(text) => {
-                            debug!(loop_index = self.loop_count, stream_index, kind="StreamedAssistantContent::Text", text = %text.text, "stream item received");
-                            print!("{}", text.text);
-                            response_text.push_str(&text.text);
-                        }
-                        StreamedAssistantContent::ToolCall(tool_call) => {
-                            debug!(loop_index = self.loop_count, stream_index, kind="StreamedAssistantContent::ToolCall", id = %tool_call.id, name = %tool_call.function.name, "stream item received");
 
-                            if !response_text.is_empty() {
-                                self.chat_history.push(Message::assistant(&response_text));
-                                response_text.clear();
-                                println!();
-                            }
-
-                            self.chat_history.push(Message::Assistant {
-                                id: None,
-                                content: OneOrMany::one(AssistantContent::tool_call(
-                                    &tool_call.id,
-                                    &tool_call.function.name,
-                                    tool_call.function.arguments.clone(),
-                                )),
-                            });
-                        }
-                        StreamedAssistantContent::ToolCallDelta { .. } => {
-                            debug!(
-                                loop_index = self.loop_count,
-                                stream_index,
-                                kind = "StreamedAssistantContent::ToolCallDelta",
-                                "stream item received"
-                            );
-                        }
-                        StreamedAssistantContent::Reasoning(reasoning) => {
-                            debug!(
-                                loop_index = self.loop_count,
-                                stream_index,
-                                kind = "StreamedAssistantContent::Reasoning",
-                                "stream item received"
-                            );
-                            print!("\n{}", "[reasoning] ".cyan());
-                            for r in reasoning.reasoning {
-                                print!("{}", r.to_string().cyan());
-                            }
-                        }
-                        StreamedAssistantContent::ReasoningDelta { .. } => {
-                            debug!(
-                                loop_index = self.loop_count,
-                                stream_index,
-                                kind = "StreamedAssistantContent::ReasoningDelta",
-                                "stream item received"
-                            );
-                        }
-                        StreamedAssistantContent::Final(_) => {
-                            debug!(
-                                loop_index = self.loop_count,
-                                stream_index,
-                                kind = "StreamedAssistantContent::Final",
-                                "stream item received"
-                            );
-                        }
+        loop {
+            tokio::select! {
+                Ok(_) = tokio::signal::ctrl_c() => {
+                    info!(loop_index = self.loop_count, "user cancelled prompt loop");
+                    println!("{}", "\ncancelled".red());
+                    if let Some(Message::Assistant { content, .. }) = self.chat_history.last()
+                        && let AssistantContent::ToolCall(_) = content.first()
+                    {
+                        self.chat_history.pop();
                     }
-                }
-                Ok(MultiTurnStreamItem::StreamUserItem(user_content)) => match user_content {
-                    StreamedUserContent::ToolResult(tool_result) => {
-                        debug!(loop_index = self.loop_count, stream_index, kind="StreamedUserContent::ToolResult", id = %tool_result.id, "stream item received");
-                        self.chat_history.push(Message::User {
-                            content: OneOrMany::one(UserContent::tool_result(
-                                tool_result.id,
-                                tool_result.content,
-                            )),
-                        });
-                    }
-                },
-                Ok(MultiTurnStreamItem::FinalResponse(_final_resp)) => {
-                    debug!(
-                        loop_index = self.loop_count,
-                        stream_index,
-                        kind = "MultiTurnStreamItem::FinalResponse",
-                        "stream item received"
-                    );
-                    println!();
-                }
-                Ok(_) => {
-                    debug!(
-                        loop_index = self.loop_count,
-                        stream_index,
-                        kind = "Ok(_unknown)",
-                        "stream item received"
-                    );
-                }
-                Err(e) => {
-                    // TODO: ugly hack for now. proper error handling will require rig
-                    // exporting agent::prompt_request::streaming::StreamingError
-                    if e.to_string().contains("PromptCancelled") {
-                        if let Some(Message::Assistant { content, .. }) = self.chat_history.last()
-                            && let AssistantContent::ToolCall(_) = content.first()
-                        {
-                            self.chat_history.pop();
-
-                            self.pending_prompt = self.hitl.take_feedback();
-                            let feedback_text = match &self.pending_prompt {
-                                Some(feedback) => {
-                                    info!(loop_index = self.loop_count, err=%e, feedback, "user cancelled prompt loop and provided feedback");
-                                    "tool call cancelled; continuing with your feedback"
-                                }
-                                None => {
-                                    info!(loop_index = self.loop_count, err=%e, "user cancelled prompt loop");
-                                    "tool call cancelled"
-                                }
-                            };
-                            println!("{}", feedback_text.red());
-                        }
-
-                        self.print_newline_before_prompt = false;
-                    } else {
-                        debug!(loop_index = self.loop_count, stream_index, kind="Err", error = %e, "stream item received");
-                        print_error(anyhow::anyhow!(e));
-                    }
+                    self.print_newline_before_prompt = false;
+                    // TODO: this cancellation signal needs to be propagated to any ongoing tool
+                    // call execution
                     break;
                 }
+                maybe_item = stream.next() => {
+                    match maybe_item {
+                        Some(item) => {
+                            match item {
+                                Ok(rig::agent::MultiTurnStreamItem::StreamAssistantItem(content)) => {
+                                    match content {
+                                        StreamedAssistantContent::Text(text) => {
+                                            debug!(loop_index = self.loop_count, stream_index, kind="StreamedAssistantContent::Text", text = %text.text, "stream item received");
+                                            print!("{}", text.text);
+                                            response_text.push_str(&text.text);
+                                        }
+                                        StreamedAssistantContent::ToolCall(tool_call) => {
+                                            debug!(loop_index = self.loop_count, stream_index, kind="StreamedAssistantContent::ToolCall", id = %tool_call.id, name = %tool_call.function.name, "stream item received");
+
+                                            if !response_text.is_empty() {
+                                                self.chat_history.push(Message::assistant(&response_text));
+                                                response_text.clear();
+                                                println!();
+                                            }
+
+                                            self.chat_history.push(Message::Assistant {
+                                                id: None,
+                                                content: OneOrMany::one(AssistantContent::tool_call(
+                                                    &tool_call.id,
+                                                    &tool_call.function.name,
+                                                    tool_call.function.arguments.clone(),
+                                                )),
+                                            });
+                                        }
+                                        StreamedAssistantContent::ToolCallDelta { .. } => {
+                                            debug!(
+                                                loop_index = self.loop_count,
+                                                stream_index,
+                                                kind = "StreamedAssistantContent::ToolCallDelta",
+                                                "stream item received"
+                                            );
+                                        }
+                                        StreamedAssistantContent::Reasoning(reasoning) => {
+                                            debug!(
+                                                loop_index = self.loop_count,
+                                                stream_index,
+                                                kind = "StreamedAssistantContent::Reasoning",
+                                                "stream item received"
+                                            );
+                                            print!("\n{}", "[reasoning] ".cyan());
+                                            for r in reasoning.reasoning {
+                                                print!("{}", r.to_string().cyan());
+                                            }
+                                        }
+                                        StreamedAssistantContent::ReasoningDelta { .. } => {
+                                            debug!(
+                                                loop_index = self.loop_count,
+                                                stream_index,
+                                                kind = "StreamedAssistantContent::ReasoningDelta",
+                                                "stream item received"
+                                            );
+                                        }
+                                        StreamedAssistantContent::Final(_) => {
+                                            debug!(
+                                                loop_index = self.loop_count,
+                                                stream_index,
+                                                kind = "StreamedAssistantContent::Final",
+                                                "stream item received"
+                                            );
+                                        }
+                                    }
+                                }
+                                Ok(MultiTurnStreamItem::StreamUserItem(user_content)) => match user_content {
+                                    StreamedUserContent::ToolResult(tool_result) => {
+                                        debug!(loop_index = self.loop_count, stream_index, kind="StreamedUserContent::ToolResult", id = %tool_result.id, "stream item received");
+                                        self.chat_history.push(Message::User {
+                                            content: OneOrMany::one(UserContent::tool_result(
+                                                tool_result.id,
+                                                tool_result.content,
+                                            )),
+                                        });
+                                    }
+                                },
+                                Ok(MultiTurnStreamItem::FinalResponse(_final_resp)) => {
+                                    debug!(
+                                        loop_index = self.loop_count,
+                                        stream_index,
+                                        kind = "MultiTurnStreamItem::FinalResponse",
+                                        "stream item received"
+                                    );
+                                    println!();
+                                }
+                                Ok(_) => {
+                                    debug!(
+                                        loop_index = self.loop_count,
+                                        stream_index,
+                                        kind = "Ok(_unknown)",
+                                        "stream item received"
+                                    );
+                                }
+                                Err(e) => {
+                                    // TODO: ugly hack for now. proper error handling will require rig
+                                    // exporting agent::prompt_request::streaming::StreamingError
+                                    if e.to_string().contains("PromptCancelled") {
+                                        if let Some(Message::Assistant { content, .. }) = self.chat_history.last()
+                                            && let AssistantContent::ToolCall(_) = content.first()
+                                        {
+                                            self.chat_history.pop();
+
+                                            self.pending_prompt = self.hitl.take_feedback();
+                                            let feedback_text = match &self.pending_prompt {
+                                                Some(feedback) => {
+                                                    info!(loop_index = self.loop_count, err=%e, feedback, "user cancelled tool call and provided feedback");
+                                                    "tool call cancelled; continuing with your feedback"
+                                                }
+                                                None => {
+                                                    info!(loop_index = self.loop_count, err=%e, "user cancelled tool call loop");
+                                                    "tool call cancelled"
+                                                }
+                                            };
+                                            println!("{}", feedback_text.red());
+                                        }
+
+                                        self.print_newline_before_prompt = false;
+                                    } else {
+                                        debug!(loop_index = self.loop_count, stream_index, kind="Err", error = %e, "stream item received");
+                                        print_error(anyhow::anyhow!(e));
+                                    }
+                                    break;
+                                }
+                            }
+                            stream_index += 1;
+                        },
+                        None => break,
+                    }
+
+                }
             }
-            stream_index += 1;
         }
 
         if !response_text.is_empty() {
@@ -305,6 +329,7 @@ where
                 error!(loop_index = self.loop_count, %err, "one agent loop done; couldn't serialize chat history")
             }
         }
+
         self.loop_count += 1;
     }
 }
