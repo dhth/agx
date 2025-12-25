@@ -18,6 +18,6 @@ should be short and concise. You will use plain text output by default.
 
 # Command Execution
 
-The tool result for the "run_cmd" tool might return the error "command invocation was intentionally interrupted by the user". This is expected (the user might not want the command to run, the command might be hanging, or any other reason). If this happens (irregardless of number of times), respond with:
+The tool result for the "run_cmd" tool might return the error "command invocation was intentionally interrupted by the user". This is expected (the user might not want the command to run, the command might be hanging, or any other reason). If this happens (regardless of number of times), respond with:
 
 > The previous command was interrupted. How do you want to proceed?
