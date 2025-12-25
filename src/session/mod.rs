@@ -75,7 +75,7 @@ where
             .await
             .with_context(|| {
                 format!(
-                    "failed to create directory for chats: {:?}",
+                    "failed to create directory for storing chat: {:?}",
                     &self.chats_dir,
                 )
             })?;
@@ -132,6 +132,16 @@ where
                         .project_log_dir
                         .join("chats")
                         .join(Local::now().format("%Y-%m-%d-%H-%M-%S").to_string());
+
+                    tokio::fs::create_dir_all(&self.chats_dir)
+                        .await
+                        .with_context(|| {
+                            format!(
+                                "failed to create directory for storing chat: {:?}",
+                                &self.chats_dir,
+                            )
+                        })?;
+
                     _ = editor.clear_screen();
                     continue;
                 }
