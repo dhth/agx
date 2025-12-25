@@ -1,6 +1,7 @@
 mod hitl;
 
 use crate::domain::Provider;
+use crate::tools::cancel::CancelTx;
 use anyhow::Context;
 use chrono::Local;
 use colored::Colorize;
@@ -27,11 +28,13 @@ where
     chats_dir: PathBuf,
     provider: Provider,
     model_name: String,
+    cancel_tx: CancelTx,
     loop_count: usize,
     chat_history: Vec<Message>,
     hitl: Hitl,
     pending_prompt: Option<String>,
     print_newline_before_prompt: bool,
+    cancellation_operational: bool,
 }
 
 impl<M> Session<M>
@@ -44,11 +47,11 @@ where
         project_log_dir: PathBuf,
         provider: Provider,
         model_name: impl Into<String>,
+        cancel_tx: CancelTx,
     ) -> Self {
-        let now = Local::now();
         let chats_dir = project_log_dir
             .join("chats")
-            .join(now.format("%Y-%m-%d-%H-%M-%S").to_string());
+            .join(Local::now().format("%Y-%m-%d-%H-%M-%S").to_string());
 
         Self {
             agent,
@@ -57,11 +60,13 @@ where
             chats_dir,
             provider,
             model_name: model_name.into(),
+            cancel_tx,
             loop_count: 0,
             chat_history: Vec::new(),
             hitl: Hitl::default(),
             pending_prompt: None,
             print_newline_before_prompt: false,
+            cancellation_operational: true,
         }
     }
 
@@ -123,6 +128,10 @@ where
                 "/new" => {
                     self.chat_history.clear();
                     self.print_newline_before_prompt = false;
+                    self.chats_dir = self
+                        .project_log_dir
+                        .join("chats")
+                        .join(Local::now().format("%Y-%m-%d-%H-%M-%S").to_string());
                     _ = editor.clear_screen();
                     continue;
                 }
@@ -134,6 +143,7 @@ where
 
                     self.chat_history.push(Message::user(p));
                     self.handle_prompt(p).await;
+                    self.cancellation_operational = self.cancel_tx.reset();
                 }
             }
         }
@@ -165,17 +175,32 @@ where
         loop {
             tokio::select! {
                 Ok(_) = tokio::signal::ctrl_c() => {
-                    info!(loop_index = self.loop_count, "user cancelled prompt loop");
-                    println!("{}", "\ncancelled".red());
+                    self.print_newline_before_prompt = false;
+                    if self.cancel_tx.is_cancelled() {
+                        println!("{}", "\ncancellation in progress".yellow());
+                        continue;
+                    }
+
                     if let Some(Message::Assistant { content, .. }) = self.chat_history.last()
                         && let AssistantContent::ToolCall(_) = content.first()
                     {
-                        self.chat_history.pop();
+                        if !self.cancellation_operational {
+                            self.chat_history.pop();
+                            println!("{}", "\nconversation stopped; ongoing command invocations might still be running (this is unexpected; let @dhth know about this via https://github.com/dhth/agx/issues)".red());
+                            break;
+                        }
+
+                        info!(loop_index = self.loop_count, "user interrupted tool call invocation");
+                        if !self.cancel_tx.cancel() {
+                            self.cancellation_operational = false;
+                            error!(loop_index = self.loop_count, stream_index, "couldn't send cancellation signal");
+                        }
+
+                        println!("{}", "\ncancelled; conveying this to the LLM...".red());
+                    } else {
+                        println!("{}", "\nconversation stopped".red());
+                        break;
                     }
-                    self.print_newline_before_prompt = false;
-                    // TODO: this cancellation signal needs to be propagated to any ongoing tool
-                    // call execution
-                    break;
                 }
                 maybe_item = stream.next() => {
                     match maybe_item {
