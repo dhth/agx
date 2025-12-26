@@ -82,3 +82,36 @@ all:
     cargo fmt --all
     cargo clippy --all-targets
     cargo test
+    just debug-check
+    just debug-fmt
+
+curl-events:
+    curl -Ns http://127.0.0.1:4880/api/debug/events | tee ~/.local/state/agx/events.json
+
+rm-events:
+    rm ~/.local/state/agx/events.json
+
+[working-directory: 'src/debug/client']
+debug-check:
+    gleam check
+
+[working-directory: 'src/debug/client']
+debug-build:
+    gleam run -m lustre/dev build agx_debug
+
+[working-directory: 'src/debug/client']
+debug-run:
+    gleam run -m lustre/dev start
+
+[working-directory: 'src/debug/client']
+debug-fmt:
+    gleam format src
+
+# for AI agents
+tail-events:
+    @if [ ! -f "$HOME/.local/state/agx/events.json" ]; then \
+        echo 'Error: events.json is not created; ask the user to run "just curl-events" first' >&2; \
+        exit 1; \
+    fi
+
+    tail -n 10 ~/.local/state/agx/events.json

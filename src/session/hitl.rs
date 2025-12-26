@@ -1,18 +1,24 @@
-use std::io::Write;
-use std::sync::{Arc, Mutex};
-
+use crate::domain::{DebugEvent, DebugEventSender};
+use crate::tools::{get_tool_repr, needs_confirmation};
 use colored::Colorize;
 use rig::agent::{CancelSignal, StreamingPromptHook};
 use rig::completion::CompletionModel;
+use std::io::Write;
+use std::sync::{Arc, Mutex};
 
-use crate::tools::{get_tool_repr, needs_confirmation};
-
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Hitl {
     feedback: Arc<Mutex<Option<String>>>,
+    debug_tx: Option<DebugEventSender>,
 }
 
 impl Hitl {
+    pub fn new(debug_tx: Option<DebugEventSender>) -> Self {
+        Self {
+            feedback: Arc::new(Mutex::new(None)),
+            debug_tx,
+        }
+    }
     pub fn take_feedback(&self) -> Option<String> {
         self.feedback.lock().ok()?.take()
     }
@@ -22,6 +28,17 @@ impl<M> StreamingPromptHook<M> for Hitl
 where
     M: CompletionModel,
 {
+    async fn on_completion_call(
+        &self,
+        prompt: &rig::message::Message,
+        history: &[rig::message::Message],
+        _cancel_sig: CancelSignal,
+    ) {
+        if let Some(tx) = &self.debug_tx {
+            tx.send(DebugEvent::llm_request(prompt, history));
+        }
+    }
+
     async fn on_tool_call(
         &self,
         tool_name: &str,

@@ -1,4 +1,5 @@
 mod app;
+mod debug;
 mod domain;
 mod env;
 mod helpers;

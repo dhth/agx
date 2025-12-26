@@ -15,6 +15,7 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code }}
       deps: ${{ steps.filter.outputs.deps }}
+      gleam: ${{ steps.filter.outputs.gleam }}
       workflows: ${{ steps.filter.outputs.workflows }}
       yml: ${{ steps.filter.outputs.yml }}
     steps:
@@ -36,6 +37,9 @@ jobs:
               - "Cargo.lock"
               - "deny.toml"
               - ".github/workflows/pr.yml"
+            gleam:
+              - "src/debug/client/**"
+              - ".github/workflows/pr.yml"
             workflows:
               - ".github/**/*.yml"
             yml:
@@ -56,6 +60,30 @@ jobs:
       - name: Build
         run: cargo build
 
+  build-gleam:
+    needs: changes
+    if: ${{ needs.changes.outputs.gleam == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28.3"
+          gleam-version: "1.14.0"
+          rebar3-version: "3.25.1"
+      - name: Compile gleam to js
+        run: |
+          cd src/debug/client
+          gleam deps download
+          gleam run -m lustre/dev build agx_debug
+      - name: Ensure compiled files haven't changed
+        run: |
+          if git --no-pager diff --name-only | grep -q "src/debug/client/dist"; then
+            echo "compiled files have changed; compile them again"
+            git --no-pager diff --name-only
+            false
+          fi
+
   lint:
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
@@ -70,6 +98,22 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Lint
         run: cargo clippy
+
+  lint-gleam:
+    needs: changes
+    if: ${{ needs.changes.outputs.gleam == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28.3"
+          gleam-version: "1.14.0"
+      - name: Run format check
+        run: |
+          cd src/debug/client
+          gleam deps download
+          gleam format src --check
 
   test:
     needs: changes

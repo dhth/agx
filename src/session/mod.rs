@@ -1,6 +1,6 @@
 mod hitl;
 
-use crate::domain::Provider;
+use crate::domain::{DebugEvent, DebugEventSender, Provider};
 use crate::tools::cancel::CancelTx;
 use anyhow::Context;
 use chrono::Local;
@@ -29,6 +29,7 @@ where
     provider: Provider,
     model_name: String,
     cancel_tx: CancelTx,
+    debug_tx: Option<DebugEventSender>,
     loop_count: usize,
     chat_history: Vec<Message>,
     hitl: Hitl,
@@ -48,6 +49,7 @@ where
         provider: Provider,
         model_name: impl Into<String>,
         cancel_tx: CancelTx,
+        debug_tx: Option<DebugEventSender>,
     ) -> Self {
         let chats_dir = project_log_dir
             .join("chats")
@@ -61,9 +63,10 @@ where
             provider,
             model_name: model_name.into(),
             cancel_tx,
+            hitl: Hitl::new(debug_tx.clone()),
+            debug_tx,
             loop_count: 0,
             chat_history: Vec::new(),
-            hitl: Hitl::default(),
             pending_prompt: None,
             print_newline_before_prompt: false,
             cancellation_operational: true,
@@ -224,22 +227,29 @@ where
                                             response_text.push_str(&text.text);
                                         }
                                         StreamedAssistantContent::ToolCall(tool_call) => {
-                                            debug!(loop_index = self.loop_count, stream_index, kind="StreamedAssistantContent::ToolCall", id = %tool_call.id, name = %tool_call.function.name, "stream item received");
-
                                             if !response_text.is_empty() {
                                                 self.chat_history.push(Message::assistant(&response_text));
+                                                if let Some(tx) = &self.debug_tx {
+                                                    tx.send(DebugEvent::assistant_text(&response_text));
+                                                }
                                                 response_text.clear();
                                                 println!();
                                             }
 
+                                            debug!(loop_index = self.loop_count, stream_index, kind="StreamedAssistantContent::ToolCall", id = %tool_call.id, name = %tool_call.function.name, "stream item received");
+                                            let tool_call_content = AssistantContent::tool_call(
+                                                &tool_call.id,
+                                                &tool_call.function.name,
+                                                tool_call.function.arguments.clone(),
+                                            );
                                             self.chat_history.push(Message::Assistant {
                                                 id: None,
-                                                content: OneOrMany::one(AssistantContent::tool_call(
-                                                    &tool_call.id,
-                                                    &tool_call.function.name,
-                                                    tool_call.function.arguments.clone(),
-                                                )),
+                                                content: OneOrMany::one(tool_call_content),
                                             });
+                                            if let Some(tx) = &self.debug_tx {
+                                                tx.send(DebugEvent::tool_call(tool_call));
+                                            }
+
                                         }
                                         StreamedAssistantContent::ToolCallDelta { .. } => {
                                             debug!(
@@ -257,8 +267,11 @@ where
                                                 "stream item received"
                                             );
                                             print!("\n{}", "[reasoning] ".cyan());
-                                            for r in reasoning.reasoning {
+                                            for r in &reasoning.reasoning {
                                                 print!("{}", r.to_string().cyan());
+                                            }
+                                            if let Some(tx) = &self.debug_tx {
+                                                tx.send(DebugEvent::reasoning(reasoning));
                                             }
                                         }
                                         StreamedAssistantContent::ReasoningDelta { .. } => {
@@ -282,21 +295,32 @@ where
                                 Ok(MultiTurnStreamItem::StreamUserItem(user_content)) => match user_content {
                                     StreamedUserContent::ToolResult(tool_result) => {
                                         debug!(loop_index = self.loop_count, stream_index, kind="StreamedUserContent::ToolResult", id = %tool_result.id, "stream item received");
+                                        let tool_result_content = UserContent::tool_result(
+                                            tool_result.id,
+                                            tool_result.content,
+                                        );
                                         self.chat_history.push(Message::User {
-                                            content: OneOrMany::one(UserContent::tool_result(
-                                                tool_result.id,
-                                                tool_result.content,
-                                            )),
+                                            content: OneOrMany::one(tool_result_content),
                                         });
                                     }
                                 },
-                                Ok(MultiTurnStreamItem::FinalResponse(_final_resp)) => {
+                                Ok(MultiTurnStreamItem::FinalResponse(final_resp)) => {
                                     debug!(
                                         loop_index = self.loop_count,
                                         stream_index,
                                         kind = "MultiTurnStreamItem::FinalResponse",
                                         "stream item received"
                                     );
+                                    if !response_text.is_empty() {
+                                        if let Some(tx) = &self.debug_tx {
+                                            tx.send(DebugEvent::assistant_text(&response_text));
+                                        }
+                                        self.chat_history.push(Message::assistant(&response_text));
+                                        response_text.clear();
+                                    }
+                                    if let Some(tx) = &self.debug_tx {
+                                        tx.send(DebugEvent::turn_complete(final_resp.usage()));
+                                    }
                                     println!();
                                 }
                                 Ok(_) => {
@@ -349,6 +373,9 @@ where
 
         if !response_text.is_empty() {
             self.chat_history.push(Message::assistant(&response_text));
+            if let Some(tx) = &self.debug_tx {
+                tx.send(DebugEvent::assistant_text(&response_text));
+            }
         }
 
         match serde_json::to_string_pretty(&self.chat_history) {

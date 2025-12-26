@@ -1,4 +1,5 @@
-use crate::domain::Provider;
+use crate::debug::DebugServer;
+use crate::domain::{DebugEvent, DebugEventReceiver, DebugEventSender, Provider};
 use crate::env::{get_env_var, get_optional_env_var};
 use crate::helpers::{get_project_context, path_to_dirname};
 use crate::providers::copilot;
@@ -6,6 +7,7 @@ use crate::session::Session;
 use crate::tools::cancel::cancellation_channel;
 use crate::tools::{CreateFileTool, EditFileTool, ReadDirTool, ReadFileTool, RunCmdTool};
 use anyhow::Context;
+use colored::Colorize;
 use rig::client::{Client, CompletionClient};
 use rig::providers::anthropic::client::AnthropicExt;
 use rig::providers::gemini::client::GeminiExt;
@@ -55,6 +57,27 @@ The following is context specific to this project:
             )
         })?;
 
+    let enable_debug_server = get_optional_env_var("AGX_DEBUG_SERVER")?
+        .map(|v| v == "1")
+        .unwrap_or(false);
+
+    let debug_tx = if enable_debug_server {
+        let (tx, _) = tokio::sync::broadcast::channel::<DebugEvent>(64);
+        let debug_rx = DebugEventReceiver::new(tx.clone());
+        let debug_tx = DebugEventSender::new(tx);
+
+        tokio::spawn(async move {
+            let server = DebugServer::new(debug_rx);
+            if let Err(e) = server.run().await {
+                eprintln!("\n{}", format!("couldn't run debug server: {:?}", e).red());
+            }
+        });
+
+        Some(debug_tx)
+    } else {
+        None
+    };
+
     match provider {
         Provider::Gemini => {
             let mut builder = gemini::Client::builder().api_key(api_key);
@@ -80,6 +103,7 @@ The following is context specific to this project:
                 provider,
                 &model_name,
                 cancel_tx,
+                debug_tx,
             );
             session.run().await?;
         }
@@ -107,6 +131,7 @@ The following is context specific to this project:
                 provider,
                 &model_name,
                 cancel_tx,
+                debug_tx,
             );
             session.run().await?;
         }
@@ -135,6 +160,7 @@ The following is context specific to this project:
                 provider,
                 &model_name,
                 cancel_tx,
+                debug_tx,
             );
             session.run().await?;
         }
@@ -177,6 +203,7 @@ The following is context specific to this project:
                 provider,
                 &model_name,
                 cancel_tx,
+                debug_tx,
             );
             session.run().await?;
         }

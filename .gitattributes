@@ -1,2 +1,6 @@
 *justfile linguist-vendored
 Dockerfile linguist-vendored
+*.js linguist-vendored
+*.mjs linguist-vendored
+*.css linguist-vendored
+*.html linguist-vendored
