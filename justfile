@@ -101,6 +101,10 @@ debug-build:
 debug-run:
     gleam run -m lustre/dev start
 
+[working-directory: 'src/debug/client']
+debug-fmt:
+    gleam format src
+
 # for AI agents
 tail-events:
     @if [ ! -f "$HOME/.local/state/agx/events.json" ]; then \
