@@ -1,8 +1,5 @@
 use chrono::{DateTime, Utc};
-use rig::{
-    OneOrMany,
-    message::{AssistantContent, Message, UserContent},
-};
+use rig::message::Message;
 use serde::Serialize;
 use tokio::sync::broadcast::{Receiver, Sender};
 
@@ -15,12 +12,8 @@ pub struct DebugEvent {
 #[derive(Debug, Serialize, Clone)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum DebugEventPayload {
-    UserMsg {
-        content: OneOrMany<UserContent>,
-    },
-    AssistantMsg {
-        id: Option<String>,
-        content: OneOrMany<AssistantContent>,
+    Message {
+        message: Message,
     },
     LlmRequest {
         prompt: Message,
@@ -31,17 +24,12 @@ pub enum DebugEventPayload {
 impl From<&Message> for DebugEvent {
     fn from(value: &Message) -> Self {
         let timestamp = Utc::now();
-        let payload = match value {
-            Message::User { content } => DebugEventPayload::UserMsg {
-                content: content.clone(),
+        Self {
+            timestamp,
+            payload: DebugEventPayload::Message {
+                message: value.clone(),
             },
-            Message::Assistant { id, content } => DebugEventPayload::AssistantMsg {
-                id: id.clone(),
-                content: content.clone(),
-            },
-        };
-
-        Self { timestamp, payload }
+        }
     }
 }
 
