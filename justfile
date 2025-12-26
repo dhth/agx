@@ -82,6 +82,7 @@ all:
     cargo fmt --all
     cargo clippy --all-targets
     cargo test
+    just debug-check
 
 curl-events:
     curl -Ns http://127.0.0.1:4880/api/debug/events | tee ~/.local/state/agx/events.json

@@ -32,7 +32,7 @@ impl DebugServer {
             .with_state(self.debug_rx.clone())
             .layer(cors);
 
-        let addr = format!("127.0.0.1:4880");
+        let addr = "127.0.0.1:4880";
 
         let listener = TcpListener::bind(&addr)
             .await

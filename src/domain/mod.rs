@@ -1,5 +1,5 @@
-mod provider;
 mod debug;
+mod provider;
 
-pub use provider::*;
 pub use debug::*;
+pub use provider::*;
