@@ -14,6 +14,7 @@ pub type Model {
 pub type Msg {
   EventReceived(Result(DebugEvent, json.DecodeError))
   ToggleScrollToNewEvent
+  ScrollToEvent(Int)
 }
 
 pub type DebugEvent {

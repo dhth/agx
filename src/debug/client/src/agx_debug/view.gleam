@@ -3,10 +3,11 @@ import agx_debug/types.{
   type Message, type Model, type Msg, type ReasoningData, type ToolCallData,
   type ToolFunction, type ToolResultContent, type Usage, type UserContent,
   AssistantMessage, AssistantText, AssistantTextEvent, DebugEvent, LlmRequest,
-  Reasoning, ReasoningData, ReasoningEvent, ToggleScrollToNewEvent, ToolCall,
-  ToolCallData, ToolCallEvent, ToolFunction, ToolResult, ToolResultText,
-  TurnComplete, UnsupportedAssistantContent, UnsupportedToolResultContent,
-  UnsupportedUserContent, Usage, UserMessage, UserText,
+  Reasoning, ReasoningData, ReasoningEvent, ScrollToEvent,
+  ToggleScrollToNewEvent, ToolCall, ToolCallData, ToolCallEvent, ToolFunction,
+  ToolResult, ToolResultText, TurnComplete, UnsupportedAssistantContent,
+  UnsupportedToolResultContent, UnsupportedUserContent, Usage, UserMessage,
+  UserText,
 }
 import gleam/int
 import gleam/list
@@ -19,13 +20,16 @@ import lustre/event
 
 pub fn view(model: Model) -> element.Element(Msg) {
   html.div(
-    [attribute.class("flex flex-col min-h-screen bg-[#282828] text-[#ebdbb2]")],
     [
-      html.div([attribute.class("mt-8 mb-12 w-4/5 mx-auto")], [
-        html.div([], [
-          heading(),
-          events_div(model.events),
-        ]),
+      attribute.class(
+        "flex flex-col min-h-screen bg-[#282828] text-[#ebdbb2] pl-20",
+      ),
+    ],
+    [
+      minimap(model.events),
+      html.div([attribute.class("mt-8 mb-12 w-full max-w-7xl mx-auto px-4")], [
+        heading(),
+        events_div(model.events),
       ]),
       control_panel(model.controls),
     ],
@@ -50,6 +54,34 @@ fn control_panel(controls: Controls) -> element.Element(Msg) {
         element.text("scroll to new event"),
       ]),
     ],
+  )
+}
+
+fn minimap(events: List(DebugEvent)) -> element.Element(Msg) {
+  let reversed_events = list.reverse(events)
+  html.div(
+    [
+      attribute.class(
+        "fixed left-0 top-0 bottom-8 w-20 bg-[#282828] border-r border-[#3c3836] flex flex-col py-2 z-40 overflow-hidden",
+      ),
+    ],
+    list.index_map(reversed_events, minimap_marker),
+  )
+}
+
+fn minimap_marker(event: DebugEvent, index: Int) -> element.Element(Msg) {
+  let DebugEvent(timestamp: _, payload:) = event
+  let #(kind, color) = payload_kind_and_color(payload)
+  html.div(
+    [
+      attribute.class(
+        "w-16 h-5 mx-auto my-px rounded-sm flex-shrink cursor-pointer hover:opacity-80",
+      ),
+      attribute.style("background-color", color),
+      attribute.title(kind),
+      event.on_click(ScrollToEvent(index)),
+    ],
+    [],
   )
 }
 
@@ -93,28 +125,20 @@ fn events_div(events: List(DebugEvent)) -> element.Element(Msg) {
     ]),
     html.div(
       [attribute.class("flex flex-col gap-4")],
-      render_events(list.reverse(events), 0),
+      render_events(list.reverse(events)),
     ),
   ])
 }
 
-fn render_events(
-  events: List(DebugEvent),
-  start_index: Int,
-) -> List(element.Element(Msg)) {
-  case events {
-    [] -> []
-    [event, ..rest] -> [
-      render_event_details(event, start_index),
-      ..render_events(rest, start_index + 1)
-    ]
-  }
+fn render_events(events: List(DebugEvent)) -> List(element.Element(Msg)) {
+  list.index_map(events, render_event_details)
 }
 
 fn render_event_details(event: DebugEvent, index: Int) -> element.Element(Msg) {
   let DebugEvent(timestamp:, payload:) = event
   let #(kind, color) = payload_kind_and_color(payload)
-  html.div([attribute.class("flex gap-3 items-start")], [
+  let event_id = "event-" <> int.to_string(index)
+  html.div([attribute.id(event_id), attribute.class("flex gap-3 items-start")], [
     html.div(
       [
         attribute.class(
@@ -172,7 +196,7 @@ fn render_payload(payload: DebugEventPayload) -> element.Element(Msg) {
   case payload {
     LlmRequest(prompt:, history:) ->
       html.div([attribute.class("flex flex-col gap-3")], [
-        html.div([], [render_message(prompt)]),
+        render_message(prompt),
         html.div([], [
           html.div(
             [attribute.class("text-sm font-semibold text-[#a89984] mb-1")],
