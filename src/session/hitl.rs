@@ -1,6 +1,5 @@
 use crate::domain::{DebugEvent, DebugEventSender};
 use crate::tools::{get_tool_repr, needs_confirmation};
-use chrono::Utc;
 use colored::Colorize;
 use rig::agent::{CancelSignal, StreamingPromptHook};
 use rig::completion::CompletionModel;
@@ -35,11 +34,7 @@ where
         history: &[rig::message::Message],
         _cancel_sig: CancelSignal,
     ) {
-        self.debug_tx.send(DebugEvent::LlmRequest {
-            prompt: prompt.clone(),
-            history: history.to_vec(),
-            timestamp: Utc::now(),
-        });
+        self.debug_tx.send(DebugEvent::llm_request(prompt, history));
     }
 
     async fn on_tool_call(

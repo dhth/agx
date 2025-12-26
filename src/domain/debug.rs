@@ -7,38 +7,53 @@ use serde::Serialize;
 use tokio::sync::broadcast::{Receiver, Sender};
 
 #[derive(Debug, Serialize, Clone)]
+pub struct DebugEvent {
+    pub timestamp: DateTime<Utc>,
+    pub payload: DebugEventPayload,
+}
+
+#[derive(Debug, Serialize, Clone)]
 #[serde(tag = "kind", rename_all = "snake_case")]
-pub enum DebugEvent {
+pub enum DebugEventPayload {
     UserMsg {
         content: OneOrMany<UserContent>,
-        timestamp: DateTime<Utc>,
     },
     AssistantMsg {
         id: Option<String>,
         content: OneOrMany<AssistantContent>,
-        timestamp: DateTime<Utc>,
     },
     LlmRequest {
         prompt: Message,
         history: Vec<Message>,
-        timestamp: DateTime<Utc>,
     },
 }
 
-impl From<Message> for DebugEvent {
-    fn from(value: Message) -> Self {
+impl From<&Message> for DebugEvent {
+    fn from(value: &Message) -> Self {
         let timestamp = Utc::now();
-        match value {
-            Message::User { content } => Self::UserMsg {
-                content,
-                timestamp,
+        let payload = match value {
+            Message::User { content } => DebugEventPayload::UserMsg {
+                content: content.clone(),
             },
-            Message::Assistant { id, content } => Self::AssistantMsg {
-                id,
-                content,
-                timestamp,
+            Message::Assistant { id, content } => DebugEventPayload::AssistantMsg {
+                id: id.clone(),
+                content: content.clone(),
             },
-        }
+        };
+
+        Self { timestamp, payload }
+    }
+}
+
+impl DebugEvent {
+    pub fn llm_request(prompt: &Message, history: &[Message]) -> Self {
+        let timestamp = Utc::now();
+        let payload = DebugEventPayload::LlmRequest {
+            prompt: prompt.clone(),
+            history: history.to_vec(),
+        };
+
+        Self { timestamp, payload }
     }
 }
 

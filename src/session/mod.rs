@@ -265,7 +265,7 @@ where
                                             for r in &reasoning.reasoning {
                                                 print!("{}", r.to_string().cyan());
                                             }
-                                            self.debug_tx.send(DebugEvent::from(Message::Assistant {
+                                            self.debug_tx.send(DebugEvent::from(&Message::Assistant {
                                                 id: None,
                                                 content: OneOrMany::one(AssistantContent::Reasoning(reasoning)),
                                             }));
@@ -379,7 +379,7 @@ where
     }
 
     fn save_to_chat_history(&mut self, message: Message) {
-        self.debug_tx.send(DebugEvent::from(message.clone()));
+        self.debug_tx.send(DebugEvent::from(&message));
         self.chat_history.push(message);
     }
 }
