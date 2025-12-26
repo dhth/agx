@@ -111,7 +111,6 @@ jobs:
         with:
           otp-version: "28"
           gleam-version: "1.14.0"
-          rebar3-version: "3"
       - name: Run format check
         run: |
           cd src/debug/client
