@@ -7,6 +7,7 @@ use crate::session::Session;
 use crate::tools::cancel::cancellation_channel;
 use crate::tools::{CreateFileTool, EditFileTool, ReadDirTool, ReadFileTool, RunCmdTool};
 use anyhow::Context;
+use colored::Colorize;
 use rig::client::{Client, CompletionClient};
 use rig::providers::anthropic::client::AnthropicExt;
 use rig::providers::gemini::client::GeminiExt;
@@ -66,7 +67,9 @@ The following is context specific to this project:
 
     tokio::spawn(async move {
         let server = DebugServer::new(debug_rx);
-        server.run().await;
+        if let Err(e) = server.run().await {
+            eprintln!("\n{}", format!("couldn't run debug server: {:?}", e).red());
+        }
     });
 
     match provider {

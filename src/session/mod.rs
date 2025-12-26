@@ -1,6 +1,6 @@
 mod hitl;
 
-use crate::domain::{DebugEventSender, Provider};
+use crate::domain::{DebugEvent, DebugEventSender, Provider};
 use crate::tools::cancel::CancelTx;
 use anyhow::Context;
 use chrono::Local;
@@ -156,7 +156,7 @@ where
                 p => {
                     _ = editor.add_history_entry(p);
 
-                    self.chat_history.push(Message::user(p));
+                    self.save_to_chat_history(Message::user(p));
                     self.handle_prompt(p).await;
                     self.cancellation_operational = self.cancel_tx.reset();
                 }
@@ -229,15 +229,14 @@ where
                                             response_text.push_str(&text.text);
                                         }
                                         StreamedAssistantContent::ToolCall(tool_call) => {
-                                            debug!(loop_index = self.loop_count, stream_index, kind="StreamedAssistantContent::ToolCall", id = %tool_call.id, name = %tool_call.function.name, "stream item received");
-
                                             if !response_text.is_empty() {
-                                                self.chat_history.push(Message::assistant(&response_text));
+                                                self.save_to_chat_history(Message::assistant(&response_text));
                                                 response_text.clear();
                                                 println!();
                                             }
 
-                                            self.chat_history.push(Message::Assistant {
+                                            debug!(loop_index = self.loop_count, stream_index, kind="StreamedAssistantContent::ToolCall", id = %tool_call.id, name = %tool_call.function.name, "stream item received");
+                                            self.save_to_chat_history(Message::Assistant {
                                                 id: None,
                                                 content: OneOrMany::one(AssistantContent::tool_call(
                                                     &tool_call.id,
@@ -245,6 +244,7 @@ where
                                                     tool_call.function.arguments.clone(),
                                                 )),
                                             });
+
                                         }
                                         StreamedAssistantContent::ToolCallDelta { .. } => {
                                             debug!(
@@ -262,9 +262,14 @@ where
                                                 "stream item received"
                                             );
                                             print!("\n{}", "[reasoning] ".cyan());
-                                            for r in reasoning.reasoning {
+                                            for r in &reasoning.reasoning {
                                                 print!("{}", r.to_string().cyan());
                                             }
+                                            self.debug_tx.send(DebugEvent::from(Message::Assistant {
+                                                id: None,
+                                                content: OneOrMany::one(AssistantContent::Reasoning(reasoning)),
+                                            }));
+
                                         }
                                         StreamedAssistantContent::ReasoningDelta { .. } => {
                                             debug!(
@@ -287,7 +292,7 @@ where
                                 Ok(MultiTurnStreamItem::StreamUserItem(user_content)) => match user_content {
                                     StreamedUserContent::ToolResult(tool_result) => {
                                         debug!(loop_index = self.loop_count, stream_index, kind="StreamedUserContent::ToolResult", id = %tool_result.id, "stream item received");
-                                        self.chat_history.push(Message::User {
+                                        self.save_to_chat_history(Message::User {
                                             content: OneOrMany::one(UserContent::tool_result(
                                                 tool_result.id,
                                                 tool_result.content,
@@ -353,7 +358,7 @@ where
         }
 
         if !response_text.is_empty() {
-            self.chat_history.push(Message::assistant(&response_text));
+            self.save_to_chat_history(Message::assistant(&response_text));
         }
 
         match serde_json::to_string_pretty(&self.chat_history) {
@@ -371,6 +376,11 @@ where
         }
 
         self.loop_count += 1;
+    }
+
+    fn save_to_chat_history(&mut self, message: Message) {
+        self.debug_tx.send(DebugEvent::from(message.clone()));
+        self.chat_history.push(message);
     }
 }
 

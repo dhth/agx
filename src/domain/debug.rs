@@ -1,32 +1,43 @@
 use chrono::{DateTime, Utc};
-use rig::message::{Message, ToolCall};
+use rig::{
+    OneOrMany,
+    message::{AssistantContent, Message, UserContent},
+};
 use serde::Serialize;
 use tokio::sync::broadcast::{Receiver, Sender};
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum DebugEvent {
+    UserMsg {
+        content: OneOrMany<UserContent>,
+        timestamp: DateTime<Utc>,
+    },
+    AssistantMsg {
+        id: Option<String>,
+        content: OneOrMany<AssistantContent>,
+        timestamp: DateTime<Utc>,
+    },
     LlmRequest {
         prompt: Message,
         history: Vec<Message>,
         timestamp: DateTime<Utc>,
     },
-    TextDelta {
-        text: String,
-        timestamp: DateTime<Utc>,
-    },
-    ToolCall {
-        call: ToolCall,
-        timestamp: DateTime<Utc>,
-    },
 }
 
-impl DebugEvent {
-    pub fn kind(&self) -> &'static str {
-        match self {
-            DebugEvent::LlmRequest { .. } => "llm_request",
-            DebugEvent::TextDelta { .. } => "text_delta",
-            DebugEvent::ToolCall { .. } => "tool_call",
+impl From<Message> for DebugEvent {
+    fn from(value: Message) -> Self {
+        let timestamp = Utc::now();
+        match value {
+            Message::User { content } => Self::UserMsg {
+                content,
+                timestamp,
+            },
+            Message::Assistant { id, content } => Self::AssistantMsg {
+                id,
+                content,
+                timestamp,
+            },
         }
     }
 }
@@ -44,6 +55,7 @@ impl DebugEventSender {
     }
 }
 
+#[derive(Clone)]
 pub struct DebugEventReceiver(Sender<DebugEvent>);
 
 impl DebugEventReceiver {
