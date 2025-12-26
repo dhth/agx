@@ -9,8 +9,9 @@ use std::convert::Infallible;
 use tokio::net::TcpListener;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::BroadcastStream;
+use tower_http::cors::{Any, CorsLayer};
 
-const EVENTS_PATH: &str = "/api/events";
+const EVENTS_PATH: &str = "/api/debug/events";
 
 pub struct DebugServer {
     debug_rx: DebugEventReceiver,
@@ -24,9 +25,12 @@ impl DebugServer {
     }
 
     pub async fn run(&self) -> anyhow::Result<()> {
+        let cors = CorsLayer::new().allow_methods(Any).allow_origin(Any);
+
         let app = Router::new()
             .route(EVENTS_PATH, get(sse_handler))
-            .with_state(self.debug_rx.clone());
+            .with_state(self.debug_rx.clone())
+            .layer(cors);
 
         let addr = format!("127.0.0.1:4880");
 
