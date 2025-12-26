@@ -156,7 +156,7 @@ where
                 p => {
                     _ = editor.add_history_entry(p);
 
-                    self.save_to_chat_history(Message::user(p));
+                    self.chat_history.push(Message::user(p));
                     self.handle_prompt(p).await;
                     self.cancellation_operational = self.cancel_tx.reset();
                 }
@@ -230,20 +230,23 @@ where
                                         }
                                         StreamedAssistantContent::ToolCall(tool_call) => {
                                             if !response_text.is_empty() {
-                                                self.save_to_chat_history(Message::assistant(&response_text));
+                                                self.chat_history.push(Message::assistant(&response_text));
+                                                self.debug_tx.send(DebugEvent::assistant_text(&response_text));
                                                 response_text.clear();
                                                 println!();
                                             }
 
                                             debug!(loop_index = self.loop_count, stream_index, kind="StreamedAssistantContent::ToolCall", id = %tool_call.id, name = %tool_call.function.name, "stream item received");
-                                            self.save_to_chat_history(Message::Assistant {
+                                            let tool_call_content = AssistantContent::tool_call(
+                                                &tool_call.id,
+                                                &tool_call.function.name,
+                                                tool_call.function.arguments.clone(),
+                                            );
+                                            self.chat_history.push(Message::Assistant {
                                                 id: None,
-                                                content: OneOrMany::one(AssistantContent::tool_call(
-                                                    &tool_call.id,
-                                                    &tool_call.function.name,
-                                                    tool_call.function.arguments.clone(),
-                                                )),
+                                                content: OneOrMany::one(tool_call_content),
                                             });
+                                            self.debug_tx.send(DebugEvent::tool_call(tool_call));
 
                                         }
                                         StreamedAssistantContent::ToolCallDelta { .. } => {
@@ -265,11 +268,7 @@ where
                                             for r in &reasoning.reasoning {
                                                 print!("{}", r.to_string().cyan());
                                             }
-                                            self.debug_tx.send(DebugEvent::from(&Message::Assistant {
-                                                id: None,
-                                                content: OneOrMany::one(AssistantContent::Reasoning(reasoning)),
-                                            }));
-
+                                            self.debug_tx.send(DebugEvent::reasoning(reasoning));
                                         }
                                         StreamedAssistantContent::ReasoningDelta { .. } => {
                                             debug!(
@@ -292,21 +291,29 @@ where
                                 Ok(MultiTurnStreamItem::StreamUserItem(user_content)) => match user_content {
                                     StreamedUserContent::ToolResult(tool_result) => {
                                         debug!(loop_index = self.loop_count, stream_index, kind="StreamedUserContent::ToolResult", id = %tool_result.id, "stream item received");
-                                        self.save_to_chat_history(Message::User {
-                                            content: OneOrMany::one(UserContent::tool_result(
-                                                tool_result.id,
-                                                tool_result.content,
-                                            )),
+                                        let tool_result_content = UserContent::tool_result(
+                                            tool_result.id,
+                                            tool_result.content,
+                                        );
+                                        self.chat_history.push(Message::User {
+                                            content: OneOrMany::one(tool_result_content),
                                         });
                                     }
                                 },
-                                Ok(MultiTurnStreamItem::FinalResponse(_final_resp)) => {
+                                Ok(MultiTurnStreamItem::FinalResponse(final_resp)) => {
                                     debug!(
                                         loop_index = self.loop_count,
                                         stream_index,
                                         kind = "MultiTurnStreamItem::FinalResponse",
                                         "stream item received"
                                     );
+                                    if !response_text.is_empty() {
+                                        self.debug_tx
+                                            .send(DebugEvent::assistant_text(&response_text));
+                                        self.chat_history.push(Message::assistant(&response_text));
+                                        response_text.clear();
+                                    }
+                                    self.debug_tx.send(DebugEvent::turn_complete(final_resp.usage()));
                                     println!();
                                 }
                                 Ok(_) => {
@@ -358,7 +365,9 @@ where
         }
 
         if !response_text.is_empty() {
-            self.save_to_chat_history(Message::assistant(&response_text));
+            self.chat_history.push(Message::assistant(&response_text));
+            self.debug_tx
+                .send(DebugEvent::assistant_text(&response_text));
         }
 
         match serde_json::to_string_pretty(&self.chat_history) {
@@ -376,11 +385,6 @@ where
         }
 
         self.loop_count += 1;
-    }
-
-    fn save_to_chat_history(&mut self, message: Message) {
-        self.debug_tx.send(DebugEvent::from(&message));
-        self.chat_history.push(message);
     }
 }
 

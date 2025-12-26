@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
-use rig::message::Message;
+use rig::completion::Usage;
+use rig::message::{Message, Reasoning, ToolCall};
 use serde::Serialize;
 use tokio::sync::broadcast::{Receiver, Sender};
 
@@ -12,36 +13,53 @@ pub struct DebugEvent {
 #[derive(Debug, Serialize, Clone)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum DebugEventPayload {
-    Message {
-        message: Message,
-    },
     LlmRequest {
         prompt: Message,
         history: Vec<Message>,
     },
-}
-
-impl From<&Message> for DebugEvent {
-    fn from(value: &Message) -> Self {
-        let timestamp = Utc::now();
-        Self {
-            timestamp,
-            payload: DebugEventPayload::Message {
-                message: value.clone(),
-            },
-        }
-    }
+    AssistantText {
+        text: String,
+    },
+    ToolCall {
+        tool_call: ToolCall,
+    },
+    Reasoning {
+        reasoning: Reasoning,
+    },
+    TurnComplete {
+        usage: Usage,
+    },
 }
 
 impl DebugEvent {
     pub fn llm_request(prompt: &Message, history: &[Message]) -> Self {
-        let timestamp = Utc::now();
-        let payload = DebugEventPayload::LlmRequest {
+        Self::new(DebugEventPayload::LlmRequest {
             prompt: prompt.clone(),
             history: history.to_vec(),
-        };
+        })
+    }
 
-        Self { timestamp, payload }
+    pub fn assistant_text(text: impl Into<String>) -> Self {
+        Self::new(DebugEventPayload::AssistantText { text: text.into() })
+    }
+
+    pub fn tool_call(tool_call: ToolCall) -> Self {
+        Self::new(DebugEventPayload::ToolCall { tool_call })
+    }
+
+    pub fn reasoning(reasoning: Reasoning) -> Self {
+        Self::new(DebugEventPayload::Reasoning { reasoning })
+    }
+
+    pub fn turn_complete(usage: Usage) -> Self {
+        Self::new(DebugEventPayload::TurnComplete { usage })
+    }
+
+    fn new(payload: DebugEventPayload) -> Self {
+        Self {
+            timestamp: Utc::now(),
+            payload,
+        }
     }
 }
 
