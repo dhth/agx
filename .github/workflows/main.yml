@@ -70,6 +70,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: erlef/setup-beam@v1
         with:
+          otp-version: "28"
           gleam-version: "1.14.0"
       - name: Compile gleam to js
         run: |
@@ -107,6 +108,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: erlef/setup-beam@v1
         with:
+          otp-version: "28"
           gleam-version: "1.14.0"
       - name: Run format check
         run: |
