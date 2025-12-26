@@ -29,7 +29,7 @@ where
     provider: Provider,
     model_name: String,
     cancel_tx: CancelTx,
-    debug_tx: DebugEventSender,
+    debug_tx: Option<DebugEventSender>,
     loop_count: usize,
     chat_history: Vec<Message>,
     hitl: Hitl,
@@ -49,13 +49,11 @@ where
         provider: Provider,
         model_name: impl Into<String>,
         cancel_tx: CancelTx,
-        debug_tx: DebugEventSender,
+        debug_tx: Option<DebugEventSender>,
     ) -> Self {
         let chats_dir = project_log_dir
             .join("chats")
             .join(Local::now().format("%Y-%m-%d-%H-%M-%S").to_string());
-
-        let debug_tx_clone = debug_tx.clone();
 
         Self {
             agent,
@@ -65,10 +63,10 @@ where
             provider,
             model_name: model_name.into(),
             cancel_tx,
+            hitl: Hitl::new(debug_tx.clone()),
             debug_tx,
             loop_count: 0,
             chat_history: Vec::new(),
-            hitl: Hitl::new(debug_tx_clone),
             pending_prompt: None,
             print_newline_before_prompt: false,
             cancellation_operational: true,
@@ -231,7 +229,9 @@ where
                                         StreamedAssistantContent::ToolCall(tool_call) => {
                                             if !response_text.is_empty() {
                                                 self.chat_history.push(Message::assistant(&response_text));
-                                                self.debug_tx.send(DebugEvent::assistant_text(&response_text));
+                                                if let Some(tx) = &self.debug_tx {
+                                                    tx.send(DebugEvent::assistant_text(&response_text));
+                                                }
                                                 response_text.clear();
                                                 println!();
                                             }
@@ -246,7 +246,9 @@ where
                                                 id: None,
                                                 content: OneOrMany::one(tool_call_content),
                                             });
-                                            self.debug_tx.send(DebugEvent::tool_call(tool_call));
+                                            if let Some(tx) = &self.debug_tx {
+                                                tx.send(DebugEvent::tool_call(tool_call));
+                                            }
 
                                         }
                                         StreamedAssistantContent::ToolCallDelta { .. } => {
@@ -268,7 +270,9 @@ where
                                             for r in &reasoning.reasoning {
                                                 print!("{}", r.to_string().cyan());
                                             }
-                                            self.debug_tx.send(DebugEvent::reasoning(reasoning));
+                                            if let Some(tx) = &self.debug_tx {
+                                                tx.send(DebugEvent::reasoning(reasoning));
+                                            }
                                         }
                                         StreamedAssistantContent::ReasoningDelta { .. } => {
                                             debug!(
@@ -308,12 +312,15 @@ where
                                         "stream item received"
                                     );
                                     if !response_text.is_empty() {
-                                        self.debug_tx
-                                            .send(DebugEvent::assistant_text(&response_text));
+                                        if let Some(tx) = &self.debug_tx {
+                                            tx.send(DebugEvent::assistant_text(&response_text));
+                                        }
                                         self.chat_history.push(Message::assistant(&response_text));
                                         response_text.clear();
                                     }
-                                    self.debug_tx.send(DebugEvent::turn_complete(final_resp.usage()));
+                                    if let Some(tx) = &self.debug_tx {
+                                        tx.send(DebugEvent::turn_complete(final_resp.usage()));
+                                    }
                                     println!();
                                 }
                                 Ok(_) => {
@@ -366,8 +373,9 @@ where
 
         if !response_text.is_empty() {
             self.chat_history.push(Message::assistant(&response_text));
-            self.debug_tx
-                .send(DebugEvent::assistant_text(&response_text));
+            if let Some(tx) = &self.debug_tx {
+                tx.send(DebugEvent::assistant_text(&response_text));
+            }
         }
 
         match serde_json::to_string_pretty(&self.chat_history) {

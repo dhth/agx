@@ -9,11 +9,11 @@ use std::sync::{Arc, Mutex};
 #[derive(Clone)]
 pub struct Hitl {
     feedback: Arc<Mutex<Option<String>>>,
-    debug_tx: DebugEventSender,
+    debug_tx: Option<DebugEventSender>,
 }
 
 impl Hitl {
-    pub fn new(debug_tx: DebugEventSender) -> Self {
+    pub fn new(debug_tx: Option<DebugEventSender>) -> Self {
         Self {
             feedback: Arc::new(Mutex::new(None)),
             debug_tx,
@@ -34,7 +34,9 @@ where
         history: &[rig::message::Message],
         _cancel_sig: CancelSignal,
     ) {
-        self.debug_tx.send(DebugEvent::llm_request(prompt, history));
+        if let Some(tx) = &self.debug_tx {
+            tx.send(DebugEvent::llm_request(prompt, history));
+        }
     }
 
     async fn on_tool_call(

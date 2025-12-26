@@ -38,7 +38,7 @@ impl DebugServer {
             .await
             .with_context(|| format!(r#"couldn't bind TCP listener to address "{addr}""#))?;
 
-        println!("starting debugger at http://{}{}", addr, EVENTS_PATH);
+        println!("starting debug server at http://{}", addr);
         axum::serve(listener, app)
             .await
             .context("couldn't start debug web server")?;

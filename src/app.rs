@@ -57,20 +57,26 @@ The following is context specific to this project:
             )
         })?;
 
-    let (debug_tx, debug_rx) = {
-        let (debug_tx, _) = tokio::sync::broadcast::channel::<DebugEvent>(64);
-        (
-            DebugEventSender::new(debug_tx.clone()),
-            DebugEventReceiver::new(debug_tx),
-        )
-    };
+    let enable_debug_server = get_optional_env_var("AGX_DEBUG_SERVER")?
+        .map(|v| v == "1")
+        .unwrap_or(false);
 
-    tokio::spawn(async move {
-        let server = DebugServer::new(debug_rx);
-        if let Err(e) = server.run().await {
-            eprintln!("\n{}", format!("couldn't run debug server: {:?}", e).red());
-        }
-    });
+    let debug_tx = if enable_debug_server {
+        let (tx, _) = tokio::sync::broadcast::channel::<DebugEvent>(64);
+        let debug_rx = DebugEventReceiver::new(tx.clone());
+        let debug_tx = DebugEventSender::new(tx);
+
+        tokio::spawn(async move {
+            let server = DebugServer::new(debug_rx);
+            if let Err(e) = server.run().await {
+                eprintln!("\n{}", format!("couldn't run debug server: {:?}", e).red());
+            }
+        });
+
+        Some(debug_tx)
+    } else {
+        None
+    };
 
     match provider {
         Provider::Gemini => {
