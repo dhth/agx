@@ -84,10 +84,22 @@ all:
     cargo test
 
 curl-events:
-    curl -Ns http://127.0.0.1:4880/api/events | tee ~/.local/state/agx/events.json
+    curl -Ns http://127.0.0.1:4880/api/debug/events | tee ~/.local/state/agx/events.json
 
 rm-events:
     rm ~/.local/state/agx/events.json
+
+[working-directory: 'src/debug/client']
+debug-check:
+    gleam check
+
+[working-directory: 'src/debug/client']
+debug-build:
+    gleam run -m lustre/dev build agx_debug
+
+[working-directory: 'src/debug/client']
+debug-run:
+    gleam run -m lustre/dev start
 
 # for AI agents
 tail-events:

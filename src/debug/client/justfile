@@ -1,0 +1,23 @@
+alias c := check
+alias b := build
+alias r := run
+alias t := test
+alias f := format
+
+default:
+    just --choose
+
+check:
+    gleam check
+
+build:
+    gleam run -m lustre/dev build app
+
+run:
+    gleam run -m lustre/dev start
+
+test:
+    gleam test
+
+format:
+    gleam format src
