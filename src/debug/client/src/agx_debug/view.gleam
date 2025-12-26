@@ -8,9 +8,9 @@ import lustre/element/html
 
 pub fn view(model: Model) -> element.Element(Msg) {
   html.div(
-    [attribute.class("flex flex-col h-screen bg-[#282828] text-[#ebdbb2]")],
+    [attribute.class("flex flex-col min-h-screen bg-[#282828] text-[#ebdbb2]")],
     [
-      html.div([attribute.class("mt-8 w-4/5 mx-auto")], [
+      html.div([attribute.class("my-8 w-4/5 mx-auto")], [
         html.div([], [
           heading(),
           events_div(model.events),
@@ -44,7 +44,7 @@ fn events_div(events: List(DebugEvent)) -> element.Element(Msg) {
       element.text(count_text),
     ]),
     html.div(
-      [attribute.class("flex flex-col gap-2")],
+      [attribute.class("flex flex-col gap-4")],
       list.map(events, render_event),
     ),
   ])
@@ -55,7 +55,7 @@ fn render_event(event: DebugEvent) -> element.Element(Msg) {
   html.pre(
     [
       attribute.class(
-        "p-2 bg-[#a89984] text-[#282828] rounded text-sm overflow-x-scroll overflow-y-auto",
+        "p-2 bg-[#a89984] text-[#282828] rounded text-sm whitespace-pre-wrap max-h-[40vh] overflow-y-auto",
       ),
     ],
     [html.text(raw)],
