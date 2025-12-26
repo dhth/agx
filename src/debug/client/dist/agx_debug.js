@@ -2442,6 +2442,9 @@ function boolean_attribute(name, value) {
 function class$(name) {
   return attribute2("class", name);
 }
+function id(value) {
+  return attribute2("id", value);
+}
 function style(property3, value) {
   if (property3 === "") {
     return class$("");
@@ -2450,6 +2453,9 @@ function style(property3, value) {
   } else {
     return attribute2("style", property3 + ":" + value + ";");
   }
+}
+function title(text) {
+  return attribute2("title", text);
 }
 function href(url) {
   return attribute2("href", url);
@@ -5152,6 +5158,12 @@ class EventReceived extends CustomType {
 }
 class ToggleScrollToNewEvent extends CustomType {
 }
+class ScrollToEvent extends CustomType {
+  constructor($0) {
+    super();
+    this[0] = $0;
+  }
+}
 class DebugEvent extends CustomType {
   constructor(timestamp, payload) {
     super();
@@ -5191,18 +5203,18 @@ class TurnComplete extends CustomType {
   }
 }
 class ToolCallData extends CustomType {
-  constructor(id, call_id, function$, signature) {
+  constructor(id2, call_id, function$, signature) {
     super();
-    this.id = id;
+    this.id = id2;
     this.call_id = call_id;
     this.function = function$;
     this.signature = signature;
   }
 }
 class ReasoningData extends CustomType {
-  constructor(id, reasoning, signature) {
+  constructor(id2, reasoning, signature) {
     super();
-    this.id = id;
+    this.id = id2;
     this.reasoning = reasoning;
     this.signature = signature;
   }
@@ -5222,9 +5234,9 @@ class UserMessage extends CustomType {
   }
 }
 class AssistantMessage extends CustomType {
-  constructor(id, content) {
+  constructor(id2, content) {
     super();
-    this.id = id;
+    this.id = id2;
     this.content = content;
   }
 }
@@ -5235,9 +5247,9 @@ class UserText extends CustomType {
   }
 }
 class ToolResult extends CustomType {
-  constructor(id, call_id, content) {
+  constructor(id2, call_id, content) {
     super();
-    this.id = id;
+    this.id = id2;
     this.call_id = call_id;
     this.content = content;
   }
@@ -5267,18 +5279,18 @@ class AssistantText extends CustomType {
   }
 }
 class ToolCall extends CustomType {
-  constructor(id, call_id, function$, signature) {
+  constructor(id2, call_id, function$, signature) {
     super();
-    this.id = id;
+    this.id = id2;
     this.call_id = call_id;
     this.function = function$;
     this.signature = signature;
   }
 }
 class Reasoning extends CustomType {
-  constructor(id, reasoning, signature) {
+  constructor(id2, reasoning, signature) {
     super();
-    this.id = id;
+    this.id = id2;
     this.reasoning = reasoning;
     this.signature = signature;
   }
@@ -5302,10 +5314,10 @@ function assistant_text_payload_decoder() {
   });
 }
 function reasoning_data_decoder() {
-  return optional_field("id", new None, optional(string2), (id) => {
+  return optional_field("id", new None, optional(string2), (id2) => {
     return field("reasoning", list2(string2), (reasoning) => {
       return optional_field("signature", new None, optional(string2), (signature) => {
-        return success(new ReasoningData(id, reasoning, signature));
+        return success(new ReasoningData(id2, reasoning, signature));
       });
     });
   });
@@ -5340,10 +5352,10 @@ function assistant_text_decoder() {
   });
 }
 function reasoning_decoder() {
-  return optional_field("id", new None, optional(string2), (id) => {
+  return optional_field("id", new None, optional(string2), (id2) => {
     return field("reasoning", list2(string2), (reasoning) => {
       return optional_field("signature", new None, optional(string2), (signature) => {
-        return success(new Reasoning(id, reasoning, signature));
+        return success(new Reasoning(id2, reasoning, signature));
       });
     });
   });
@@ -5360,11 +5372,11 @@ function tool_function_decoder() {
   });
 }
 function tool_call_data_decoder() {
-  return field("id", string2, (id) => {
+  return field("id", string2, (id2) => {
     return optional_field("call_id", new None, optional(string2), (call_id) => {
       return field("function", tool_function_decoder(), (function$) => {
         return optional_field("signature", new None, optional(string2), (signature) => {
-          return success(new ToolCallData(id, call_id, function$, signature));
+          return success(new ToolCallData(id2, call_id, function$, signature));
         });
       });
     });
@@ -5376,11 +5388,11 @@ function tool_call_payload_decoder() {
   });
 }
 function tool_call_decoder() {
-  return field("id", string2, (id) => {
+  return field("id", string2, (id2) => {
     return optional_field("call_id", new None, optional(string2), (call_id) => {
       return field("function", tool_function_decoder(), (function$) => {
         return optional_field("signature", new None, optional(string2), (signature) => {
-          return success(new ToolCall(id, call_id, function$, signature));
+          return success(new ToolCall(id2, call_id, function$, signature));
         });
       });
     });
@@ -5399,9 +5411,9 @@ function assistant_content_decoder() {
   ]));
 }
 function assistant_message_decoder() {
-  return optional_field("id", new None, optional(string2), (id) => {
+  return optional_field("id", new None, optional(string2), (id2) => {
     return field("content", list2(assistant_content_decoder()), (content) => {
-      return success(new AssistantMessage(id, content));
+      return success(new AssistantMessage(id2, content));
     });
   });
 }
@@ -5423,10 +5435,10 @@ function tool_result_content_decoder() {
   });
 }
 function tool_result_decoder() {
-  return field("id", string2, (id) => {
+  return field("id", string2, (id2) => {
     return optional_field("call_id", new None, optional(string2), (call_id) => {
       return field("content", list2(tool_result_content_decoder()), (content) => {
-        return success(new ToolResult(id, call_id, content));
+        return success(new ToolResult(id2, call_id, content));
       });
     });
   });
@@ -5502,6 +5514,12 @@ function scroll_to_bottom() {
     window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
   }, 100);
 }
+function scroll_to_element(id2) {
+  const element4 = document.getElementById(id2);
+  if (element4) {
+    element4.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
 
 // build/dev/javascript/agx_debug/agx_debug/ffi/sse.mjs
 function subscribe_sse(url, on_message) {
@@ -5521,6 +5539,11 @@ function subscribe_sse2(url) {
 function scroll_to_bottom2() {
   return from((_) => {
     return scroll_to_bottom();
+  });
+}
+function scroll_to_element2(id2) {
+  return from((_) => {
+    return scroll_to_element(id2);
   });
 }
 
@@ -5552,9 +5575,13 @@ function update2(model, msg) {
     } else {
       return zero;
     }
-  } else {
+  } else if (msg instanceof ToggleScrollToNewEvent) {
     let new_controls = new Controls(!model.controls.scroll_to_new_event);
     return [new Model(model.events, new_controls), none()];
+  } else {
+    let index4 = msg[0];
+    let id2 = "event-" + to_string(index4);
+    return [model, scroll_to_element2(id2)];
   }
 }
 
@@ -5610,6 +5637,36 @@ function payload_kind_and_color(payload) {
     return ["turn_complete", "#b8bb26"];
   }
 }
+function minimap_marker(event4, index4) {
+  let payload;
+  payload = event4.payload;
+  let $ = payload_kind_and_color(payload);
+  let kind;
+  let color;
+  kind = $[0];
+  color = $[1];
+  return div(toList([
+    class$("w-16 h-3.5 mx-auto my-px rounded-sm flex-shrink cursor-pointer hover:opacity-80"),
+    style("background-color", color),
+    title(kind),
+    on_click(new ScrollToEvent(index4))
+  ]), toList([]));
+}
+function render_minimap_markers(events, index4) {
+  if (events instanceof Empty) {
+    return events;
+  } else {
+    let event4 = events.head;
+    let rest = events.tail;
+    return prepend(minimap_marker(event4, index4), render_minimap_markers(rest, index4 + 1));
+  }
+}
+function minimap(events) {
+  let reversed_events = reverse(events);
+  return div(toList([
+    class$("fixed left-0 top-0 bottom-8 w-20 bg-[#282828] border-r border-[#3c3836] flex flex-col py-2 z-40 overflow-hidden")
+  ]), render_minimap_markers(reversed_events, 0));
+}
 function format_timestamp(timestamp) {
   let $ = split2(timestamp, "T");
   if ($ instanceof Empty) {
@@ -5637,9 +5694,9 @@ function format_timestamp(timestamp) {
   }
 }
 function render_tool_call_data(tool_call) {
-  let id;
+  let id2;
   let function$;
-  id = tool_call.id;
+  id2 = tool_call.id;
   function$ = tool_call.function;
   let name;
   let arguments$;
@@ -5650,7 +5707,7 @@ function render_tool_call_data(tool_call) {
       span(toList([
         class$("font-mono text-sm bg-[#282828] px-1 rounded")
       ]), toList([text2(name)])),
-      span(toList([class$("text-xs text-[#a89984]")]), toList([text2("id: " + id)]))
+      span(toList([class$("text-xs text-[#a89984]")]), toList([text2("id: " + id2)]))
     ])),
     pre(toList([
       class$("text-xs bg-[#282828] p-1 rounded whitespace-pre-wrap break-all")
@@ -5704,12 +5761,12 @@ function render_user_content(content) {
     let text4 = content.text;
     return div(toList([class$("text-sm")]), toList([text2(text4)]));
   } else if (content instanceof ToolResult) {
-    let id = content.id;
+    let id2 = content.id;
     let inner = content.content;
     return div(toList([class$("text-sm")]), toList([
       span(toList([
         class$("font-mono text-xs bg-[#282828] px-1 rounded")
-      ]), toList([text2("tool_result: " + id)])),
+      ]), toList([text2("tool_result: " + id2)])),
       div(toList([class$("mt-1")]), map(inner, render_tool_result_content))
     ]));
   } else {
@@ -5719,7 +5776,7 @@ function render_user_content(content) {
     ]), toList([text3(raw)]));
   }
 }
-function render_tool_call(id, function$) {
+function render_tool_call(id2, function$) {
   let name;
   let arguments$;
   name = function$.name;
@@ -5729,7 +5786,7 @@ function render_tool_call(id, function$) {
       span(toList([
         class$("font-mono text-xs bg-[#282828] px-1 rounded")
       ]), toList([text2(name)])),
-      span(toList([class$("text-xs text-[#a89984]")]), toList([text2("id: " + id)]))
+      span(toList([class$("text-xs text-[#a89984]")]), toList([text2("id: " + id2)]))
     ])),
     pre(toList([
       class$("mt-1 text-xs bg-[#282828] p-1 rounded whitespace-pre-wrap break-all")
@@ -5741,9 +5798,9 @@ function render_assistant_content(content) {
     let text4 = content.text;
     return div(toList([class$("text-sm whitespace-pre-wrap")]), toList([text2(text4)]));
   } else if (content instanceof ToolCall) {
-    let id = content.id;
+    let id2 = content.id;
     let function$ = content.function;
-    return render_tool_call(id, function$);
+    return render_tool_call(id2, function$);
   } else if (content instanceof Reasoning) {
     let reasoning = content.reasoning;
     return div(toList([class$("text-sm italic")]), toList([
@@ -5767,13 +5824,13 @@ function render_message(message) {
       div(toList([class$("flex flex-col gap-1")]), map(content, render_user_content))
     ]));
   } else {
-    let id = message.id;
+    let id2 = message.id;
     let content = message.content;
     return div(toList([class$("p-2 bg-[#b16286] rounded")]), toList([
       div(toList([class$("text-xs font-semibold mb-1")]), toList([
         text2((() => {
-          if (id instanceof Some) {
-            let i = id[0];
+          if (id2 instanceof Some) {
+            let i = id2[0];
             return "assistant (" + i + ")";
           } else {
             return "assistant";
@@ -5825,7 +5882,11 @@ function render_event_details(event4, index4) {
   let color;
   kind = $[0];
   color = $[1];
-  return div(toList([class$("flex gap-3 items-start")]), toList([
+  let event_id = "event-" + to_string(index4);
+  return div(toList([
+    id(event_id),
+    class$("flex gap-3 items-start")
+  ]), toList([
     div(toList([
       class$("flex-shrink-0 w-36 flex flex-col justify-between p-3 rounded text-sm font-mono"),
       style("background-color", color)
@@ -5866,9 +5927,10 @@ function events_div(events) {
 }
 function view(model) {
   return div(toList([
-    class$("flex flex-col min-h-screen bg-[#282828] text-[#ebdbb2]")
+    class$("flex flex-col min-h-screen bg-[#282828] text-[#ebdbb2] pl-20")
   ]), toList([
-    div(toList([class$("mt-8 mb-12 w-4/5 mx-auto")]), toList([
+    minimap(model.events),
+    div(toList([class$("mt-8 mb-12 w-full max-w-7xl mx-auto px-4")]), toList([
       div(toList([]), toList([heading(), events_div(model.events)]))
     ])),
     control_panel(model.controls)

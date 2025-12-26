@@ -1,5 +1,6 @@
 import agx_debug/effects
 import agx_debug/types.{type Model, type Msg, Controls, Model}
+import gleam/int
 import lustre/effect
 
 pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
@@ -23,6 +24,11 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
       let new_controls =
         Controls(scroll_to_new_event: !model.controls.scroll_to_new_event)
       #(Model(..model, controls: new_controls), effect.none())
+    }
+
+    types.ScrollToEvent(index) -> {
+      let id = "event-" <> int.to_string(index)
+      #(model, effects.scroll_to_element(id))
     }
   }
 }
