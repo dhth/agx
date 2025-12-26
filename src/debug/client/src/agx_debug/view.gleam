@@ -65,21 +65,8 @@ fn minimap(events: List(DebugEvent)) -> element.Element(Msg) {
         "fixed left-0 top-0 bottom-8 w-20 bg-[#282828] border-r border-[#3c3836] flex flex-col py-2 z-40 overflow-hidden",
       ),
     ],
-    render_minimap_markers(reversed_events, 0),
+    list.index_map(reversed_events, minimap_marker),
   )
-}
-
-fn render_minimap_markers(
-  events: List(DebugEvent),
-  index: Int,
-) -> List(element.Element(Msg)) {
-  case events {
-    [] -> []
-    [event, ..rest] -> [
-      minimap_marker(event, index),
-      ..render_minimap_markers(rest, index + 1)
-    ]
-  }
 }
 
 fn minimap_marker(event: DebugEvent, index: Int) -> element.Element(Msg) {
@@ -138,22 +125,13 @@ fn events_div(events: List(DebugEvent)) -> element.Element(Msg) {
     ]),
     html.div(
       [attribute.class("flex flex-col gap-4")],
-      render_events(list.reverse(events), 0),
+      render_events(list.reverse(events)),
     ),
   ])
 }
 
-fn render_events(
-  events: List(DebugEvent),
-  start_index: Int,
-) -> List(element.Element(Msg)) {
-  case events {
-    [] -> []
-    [event, ..rest] -> [
-      render_event_details(event, start_index),
-      ..render_events(rest, start_index + 1)
-    ]
-  }
+fn render_events(events: List(DebugEvent)) -> List(element.Element(Msg)) {
+  list.index_map(events, render_event_details)
 }
 
 fn render_event_details(event: DebugEvent, index: Int) -> element.Element(Msg) {
@@ -218,7 +196,7 @@ fn render_payload(payload: DebugEventPayload) -> element.Element(Msg) {
   case payload {
     LlmRequest(prompt:, history:) ->
       html.div([attribute.class("flex flex-col gap-3")], [
-        html.div([], [render_message(prompt)]),
+        render_message(prompt),
         html.div([], [
           html.div(
             [attribute.class("text-sm font-semibold text-[#a89984] mb-1")],

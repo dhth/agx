@@ -1002,6 +1002,28 @@ function map_loop(loop$list, loop$fun, loop$acc) {
 function map(list, fun) {
   return map_loop(list, fun, toList([]));
 }
+function index_map_loop(loop$list, loop$fun, loop$index, loop$acc) {
+  while (true) {
+    let list = loop$list;
+    let fun = loop$fun;
+    let index2 = loop$index;
+    let acc = loop$acc;
+    if (list instanceof Empty) {
+      return reverse(acc);
+    } else {
+      let first$1 = list.head;
+      let rest$1 = list.tail;
+      let acc$1 = prepend(fun(first$1, index2), acc);
+      loop$list = rest$1;
+      loop$fun = fun;
+      loop$index = index2 + 1;
+      loop$acc = acc$1;
+    }
+  }
+}
+function index_map(list, fun) {
+  return index_map_loop(list, fun, 0, toList([]));
+}
 function append_loop(loop$first, loop$second) {
   while (true) {
     let first = loop$first;
@@ -5646,26 +5668,17 @@ function minimap_marker(event4, index4) {
   kind = $[0];
   color = $[1];
   return div(toList([
-    class$("w-16 h-3.5 mx-auto my-px rounded-sm flex-shrink cursor-pointer hover:opacity-80"),
+    class$("w-16 h-5 mx-auto my-px rounded-sm flex-shrink cursor-pointer hover:opacity-80"),
     style("background-color", color),
     title(kind),
     on_click(new ScrollToEvent(index4))
   ]), toList([]));
 }
-function render_minimap_markers(events, index4) {
-  if (events instanceof Empty) {
-    return events;
-  } else {
-    let event4 = events.head;
-    let rest = events.tail;
-    return prepend(minimap_marker(event4, index4), render_minimap_markers(rest, index4 + 1));
-  }
-}
 function minimap(events) {
   let reversed_events = reverse(events);
   return div(toList([
     class$("fixed left-0 top-0 bottom-8 w-20 bg-[#282828] border-r border-[#3c3836] flex flex-col py-2 z-40 overflow-hidden")
-  ]), render_minimap_markers(reversed_events, 0));
+  ]), index_map(reversed_events, minimap_marker));
 }
 function format_timestamp(timestamp) {
   let $ = split2(timestamp, "T");
@@ -5846,7 +5859,7 @@ function render_payload(payload) {
     let prompt = payload.prompt;
     let history = payload.history;
     return div(toList([class$("flex flex-col gap-3")]), toList([
-      div(toList([]), toList([render_message(prompt)])),
+      render_message(prompt),
       div(toList([]), toList([
         div(toList([
           class$("text-sm font-semibold text-[#a89984] mb-1")
@@ -5902,14 +5915,8 @@ function render_event_details(event4, index4) {
     div(toList([class$("flex-1 flex flex-col gap-2 min-w-0")]), toList([render_payload(payload)]))
   ]));
 }
-function render_events(events, start_index) {
-  if (events instanceof Empty) {
-    return events;
-  } else {
-    let event4 = events.head;
-    let rest = events.tail;
-    return prepend(render_event_details(event4, start_index), render_events(rest, start_index + 1));
-  }
+function render_events(events) {
+  return index_map(events, render_event_details);
 }
 function events_div(events) {
   let count = length(events);
@@ -5922,7 +5929,7 @@ function events_div(events) {
   let count_text = _block;
   return div(toList([class$("mt-4")]), toList([
     div(toList([class$("text-lg font-semibold mb-2")]), toList([text2(count_text)])),
-    div(toList([class$("flex flex-col gap-4")]), render_events(reverse(events), 0))
+    div(toList([class$("flex flex-col gap-4")]), render_events(reverse(events)))
   ]));
 }
 function view(model) {
@@ -5930,9 +5937,7 @@ function view(model) {
     class$("flex flex-col min-h-screen bg-[#282828] text-[#ebdbb2] pl-20")
   ]), toList([
     minimap(model.events),
-    div(toList([class$("mt-8 mb-12 w-full max-w-7xl mx-auto px-4")]), toList([
-      div(toList([]), toList([heading(), events_div(model.events)]))
-    ])),
+    div(toList([class$("mt-8 mb-12 w-full max-w-7xl mx-auto px-4")]), toList([heading(), events_div(model.events)])),
     control_panel(model.controls)
   ]));
 }
