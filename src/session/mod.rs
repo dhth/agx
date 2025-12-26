@@ -1,6 +1,6 @@
 mod hitl;
 
-use crate::domain::Provider;
+use crate::domain::{DebugEventSender, Provider};
 use crate::tools::cancel::CancelTx;
 use anyhow::Context;
 use chrono::Local;
@@ -29,6 +29,7 @@ where
     provider: Provider,
     model_name: String,
     cancel_tx: CancelTx,
+    debug_tx: DebugEventSender,
     loop_count: usize,
     chat_history: Vec<Message>,
     hitl: Hitl,
@@ -48,10 +49,13 @@ where
         provider: Provider,
         model_name: impl Into<String>,
         cancel_tx: CancelTx,
+        debug_tx: DebugEventSender,
     ) -> Self {
         let chats_dir = project_log_dir
             .join("chats")
             .join(Local::now().format("%Y-%m-%d-%H-%M-%S").to_string());
+
+        let debug_tx_clone = debug_tx.clone();
 
         Self {
             agent,
@@ -61,9 +65,10 @@ where
             provider,
             model_name: model_name.into(),
             cancel_tx,
+            debug_tx,
             loop_count: 0,
             chat_history: Vec::new(),
-            hitl: Hitl::default(),
+            hitl: Hitl::new(debug_tx_clone),
             pending_prompt: None,
             print_newline_before_prompt: false,
             cancellation_operational: true,

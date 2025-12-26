@@ -1,4 +1,5 @@
-use crate::domain::Provider;
+use crate::debug::DebugServer;
+use crate::domain::{DebugEvent, DebugEventReceiver, DebugEventSender, Provider};
 use crate::env::{get_env_var, get_optional_env_var};
 use crate::helpers::{get_project_context, path_to_dirname};
 use crate::providers::copilot;
@@ -55,6 +56,19 @@ The following is context specific to this project:
             )
         })?;
 
+    let (debug_tx, debug_rx) = {
+        let (debug_tx, _) = tokio::sync::broadcast::channel::<DebugEvent>(64);
+        (
+            DebugEventSender::new(debug_tx.clone()),
+            DebugEventReceiver::new(debug_tx),
+        )
+    };
+
+    tokio::spawn(async move {
+        let server = DebugServer::new(debug_rx);
+        server.run().await;
+    });
+
     match provider {
         Provider::Gemini => {
             let mut builder = gemini::Client::builder().api_key(api_key);
@@ -80,6 +94,7 @@ The following is context specific to this project:
                 provider,
                 &model_name,
                 cancel_tx,
+                debug_tx,
             );
             session.run().await?;
         }
@@ -107,6 +122,7 @@ The following is context specific to this project:
                 provider,
                 &model_name,
                 cancel_tx,
+                debug_tx,
             );
             session.run().await?;
         }
@@ -135,6 +151,7 @@ The following is context specific to this project:
                 provider,
                 &model_name,
                 cancel_tx,
+                debug_tx,
             );
             session.run().await?;
         }
@@ -177,6 +194,7 @@ The following is context specific to this project:
                 provider,
                 &model_name,
                 cancel_tx,
+                debug_tx,
             );
             session.run().await?;
         }

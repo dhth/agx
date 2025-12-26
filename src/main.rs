@@ -6,6 +6,7 @@ mod providers;
 mod session;
 mod telemetry;
 mod tools;
+mod debug;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
