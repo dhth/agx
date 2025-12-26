@@ -83,6 +83,7 @@ all:
     cargo clippy --all-targets
     cargo test
     just debug-check
+    just debug-fmt
 
 curl-events:
     curl -Ns http://127.0.0.1:4880/api/debug/events | tee ~/.local/state/agx/events.json
@@ -109,7 +110,7 @@ debug-fmt:
 # for AI agents
 tail-events:
     @if [ ! -f "$HOME/.local/state/agx/events.json" ]; then \
-        echo 'Error: events.log is not created; ask the user to run "just curl-events" first' >&2; \
+        echo 'Error: events.json is not created; ask the user to run "just curl-events" first' >&2; \
         exit 1; \
     fi
 

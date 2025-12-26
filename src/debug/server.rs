@@ -98,7 +98,7 @@ async fn sse_handler(
             let json = serde_json::to_string(&event).ok()?;
             Some(Ok(Event::default().data(json)))
         }
-        Err(_) => None,
+        Err(_) => None, // TODO: handle this error
     });
 
     Sse::new(stream)

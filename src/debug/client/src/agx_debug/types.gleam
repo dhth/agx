@@ -37,14 +37,6 @@ pub type ToolCallData {
   )
 }
 
-pub type ToolResultData {
-  ToolResultData(
-    id: String,
-    call_id: option.Option(String),
-    content: List(ToolResultContent),
-  )
-}
-
 pub type ReasoningData {
   ReasoningData(
     id: option.Option(String),
