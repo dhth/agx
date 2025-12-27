@@ -50,6 +50,14 @@ where
             return;
         }
 
+        // TODO: this is a short-term workaround
+        if std::env::var("AGX_SKIP_HITL")
+            .map(|v| v == "1")
+            .unwrap_or(false)
+        {
+            return;
+        }
+
         println!(
             "\n{}",
             format!("[request for tool-call] {}", get_tool_repr(tool_name, args)).bright_purple()
