@@ -1,41 +1,42 @@
-mod hitl;
-
 use crate::domain::{DebugEvent, DebugEventSender, Provider};
-use crate::tools::cancel::CancelTx;
+use crate::tools::AgxToolCall;
 use anyhow::Context;
 use chrono::Local;
 use colored::Colorize;
 use futures::StreamExt;
-use hitl::Hitl;
 use rig::OneOrMany;
-use rig::agent::{Agent, MultiTurnStreamItem};
-use rig::completion::CompletionModel;
-use rig::message::{AssistantContent, Message, UserContent};
-use rig::streaming::{StreamedAssistantContent, StreamedUserContent, StreamingPrompt};
+use rig::agent::Agent;
+use rig::completion::{Completion, CompletionModel};
+use rig::message::{
+    AssistantContent, Message, ToolCall, ToolResult, ToolResultContent, UserContent,
+};
+use rig::streaming::StreamedAssistantContent;
+use rustyline::DefaultEditor;
 use std::path::PathBuf;
-use tracing::{debug, error, info};
 
 const BANNER: &str = include_str!("assets/logo.txt");
 const COMMANDS: &str = include_str!("assets/commands.txt");
+
+enum ToolCallConfirmation {
+    Proceed,
+    Reject,
+    Feedback(String),
+}
 
 pub struct Session<M>
 where
     M: CompletionModel + 'static,
 {
     agent: Agent<M>,
+    editor: DefaultEditor,
     project_dir: PathBuf,
     project_log_dir: PathBuf,
     chats_dir: PathBuf,
     provider: Provider,
     model_name: String,
-    cancel_tx: CancelTx,
     debug_tx: Option<DebugEventSender>,
-    loop_count: usize,
     chat_history: Vec<Message>,
-    hitl: Hitl,
-    pending_prompt: Option<String>,
     print_newline_before_prompt: bool,
-    cancellation_operational: bool,
 }
 
 impl<M> Session<M>
@@ -48,29 +49,26 @@ where
         project_log_dir: PathBuf,
         provider: Provider,
         model_name: impl Into<String>,
-        cancel_tx: CancelTx,
         debug_tx: Option<DebugEventSender>,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let chats_dir = project_log_dir
             .join("chats")
             .join(Local::now().format("%Y-%m-%d-%H-%M-%S").to_string());
 
-        Self {
+        let editor = DefaultEditor::new()?;
+
+        Ok(Self {
             agent,
+            editor,
             project_dir,
             project_log_dir,
             chats_dir,
             provider,
             model_name: model_name.into(),
-            cancel_tx,
-            hitl: Hitl::new(debug_tx.clone()),
             debug_tx,
-            loop_count: 0,
             chat_history: Vec::new(),
-            pending_prompt: None,
             print_newline_before_prompt: false,
-            cancellation_operational: true,
-        }
+        })
     }
 
     pub async fn run(&mut self) -> anyhow::Result<()> {
@@ -84,8 +82,7 @@ where
             })?;
         let history_file_path = self.project_log_dir.join("history.txt");
 
-        let mut editor = rustyline::DefaultEditor::new()?;
-        let _ = editor.load_history(&history_file_path);
+        let _ = self.editor.load_history(&history_file_path);
 
         print!(
             "
@@ -109,18 +106,15 @@ where
                 ""
             };
             println!("{}{}", prefix, metadata);
-            let user_input = if let Some(q) = self.pending_prompt.take() {
-                q
-            } else {
-                editor
-                    .readline(&prompt_marker)
-                    .context("couldn't read input")?
-            };
+            let user_input = self
+                .editor
+                .readline(&prompt_marker)
+                .context("couldn't read input")?;
 
             match user_input.trim() {
                 "" => {}
                 "clear" => {
-                    _ = editor.clear_screen();
+                    _ = self.editor.clear_screen();
                     self.print_newline_before_prompt = false;
                     continue;
                 }
@@ -145,257 +139,318 @@ where
                             )
                         })?;
 
-                    _ = editor.clear_screen();
+                    if let Some(tx) = &self.debug_tx {
+                        tx.send(DebugEvent::new_session());
+                    }
+
+                    _ = self.editor.clear_screen();
                     continue;
                 }
                 "/quit" | "/exit" | "bye" | ":q" => {
                     break;
                 }
                 p => {
-                    _ = editor.add_history_entry(p);
+                    _ = self.editor.add_history_entry(p);
 
-                    self.chat_history.push(Message::user(p));
                     self.handle_prompt(p).await;
-                    self.cancellation_operational = self.cancel_tx.reset();
+                    if let Some(tx) = &self.debug_tx {
+                        tx.send(DebugEvent::turn_complete(&self.chat_history));
+                    }
                 }
             }
         }
 
-        let _ = editor.save_history(&history_file_path);
+        let _ = self.editor.save_history(&history_file_path);
 
         Ok(())
     }
 
     async fn handle_prompt(&mut self, prompt: &str) {
-        debug!(
-            loop_index = self.loop_count,
-            query = prompt,
-            "user entered query"
-        );
-
-        let mut stream = self
-            .agent
-            .stream_prompt(prompt)
-            .multi_turn(30)
-            .with_hook(self.hitl.clone())
-            .with_history(self.chat_history.clone())
-            .await;
-
-        let mut response_text = String::new();
-
-        let mut stream_index = 0;
+        let mut prompt = Message::user(prompt);
 
         loop {
-            tokio::select! {
+            let (response_text, tool_calls) = tokio::select! {
                 Ok(_) = tokio::signal::ctrl_c() => {
-                    self.print_newline_before_prompt = false;
-                    if self.cancel_tx.is_cancelled() {
-                        println!("{}", "\ncancellation in progress".yellow());
-                        continue;
+                    println!("{}", "\ninterrupted".red());
+                    if let Some(tx) = &self.debug_tx {
+                        tx.send(DebugEvent::interrupted());
                     }
-
-                    if let Some(Message::Assistant { content, .. }) = self.chat_history.last()
-                        && let AssistantContent::ToolCall(_) = content.first()
-                    {
-                        if !self.cancellation_operational {
-                            self.chat_history.pop();
-                            println!("{}", "\nconversation stopped; ongoing command invocations might still be running (this is unexpected; let @dhth know about this via https://github.com/dhth/agx/issues)".red());
+                    return;
+                }
+                result = self.stream_llm_response(prompt.clone()) => {
+                    match result {
+                        Ok(r) => r,
+                        Err(e) => {
+                            print_error(e);
                             break;
                         }
+                    }
+                }
+            };
 
-                        info!(loop_index = self.loop_count, "user interrupted tool call invocation");
-                        if !self.cancel_tx.cancel() {
-                            self.cancellation_operational = false;
-                            error!(loop_index = self.loop_count, stream_index, "couldn't send cancellation signal");
-                        }
+            let mut assistant_contents = vec![];
 
-                        println!("{}", "\ncancelled; conveying this to the LLM...".red());
-                    } else {
-                        println!("{}", "\nconversation stopped".red());
+            if !response_text.is_empty() {
+                assistant_contents.push(AssistantContent::text(&response_text));
+            }
+
+            for tc in &tool_calls {
+                assistant_contents.push(AssistantContent::ToolCall(tc.clone()));
+            }
+
+            if !assistant_contents.is_empty() {
+                #[allow(clippy::expect_used)]
+                self.chat_history.push(Message::Assistant {
+                    id: None,
+                    content: OneOrMany::many(assistant_contents)
+                        .expect("should've pushed assistant contents to chat history"),
+                });
+            }
+
+            if tool_calls.is_empty() {
+                break;
+            }
+
+            let mut tool_results = vec![];
+
+            for tool_call in tool_calls {
+                let id = tool_call.id.clone();
+                let call_id = tool_call.call_id.clone();
+
+                let tool_call = match AgxToolCall::try_from(tool_call) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        tool_results.push(ToolResult {
+                            id,
+                            call_id,
+                            content: OneOrMany::one(ToolResultContent::text(format!(
+                                "failed to parse tool call: {}",
+                                e
+                            ))),
+                        });
+                        continue;
+                    }
+                };
+
+                println!(
+                    "{}",
+                    format!("[tool call] {}", tool_call.repr()).bright_purple()
+                );
+
+                let details = match tool_call.details().await {
+                    Ok(d) => d,
+                    Err(e) => {
+                        tool_results.push(ToolResult {
+                            id,
+                            call_id,
+                            content: OneOrMany::one(ToolResultContent::text(format!(
+                                "tool call failed: {}",
+                                e.message()
+                            ))),
+                        });
+                        continue;
+                    }
+                };
+
+                if let Some(info) = details {
+                    println!("{}", info);
+                }
+
+                let confirmation = if tool_call.needs_confirmation() {
+                    self.confirm_tool_call()
+                } else {
+                    ToolCallConfirmation::Proceed
+                };
+
+                match confirmation {
+                    ToolCallConfirmation::Proceed => {
+                        let tool_result = tokio::select! {
+                            Ok(_) = tokio::signal::ctrl_c() => {
+                                println!("{}", "\ninterrupted".red());
+                                if let Some(tx) = &self.debug_tx {
+                                    tx.send(DebugEvent::tool_result(&id, call_id.clone(), "tool call interrupted by user"));
+                                    tx.send(DebugEvent::interrupted());
+                                }
+                                let interrupted_result = ToolResult {
+                                    id: id.clone(),
+                                    call_id,
+                                    content: OneOrMany::one(ToolResultContent::text("tool call interrupted by user")),
+                                };
+                                tool_results.push(interrupted_result);
+
+                                self.chat_history.push(Message::User {
+                                    #[allow(clippy::expect_used)]
+                                    content: OneOrMany::many(
+                                        tool_results
+                                            .into_iter()
+                                            .map(UserContent::ToolResult)
+                                            .collect::<Vec<_>>(),
+                                    )
+                                    .expect("tool results should've been added to chat history"),
+                                });
+
+                                return;
+                            }
+                            result = tool_call.execute() => {
+                                match result {
+                                    Ok(output) => {
+                                        if let Some(tx) = &self.debug_tx {
+                                            tx.send(DebugEvent::tool_result(&id, call_id.clone(), &output));
+                                        }
+                                        ToolResult {
+                                            id,
+                                            call_id,
+                                            content: OneOrMany::one(ToolResultContent::text(output)),
+                                        }
+                                    },
+                                    Err(e) => {
+                                        print_error(anyhow::anyhow!("{}", e));
+                                        let error_str = e.to_string();
+                                        if let Some(tx) = &self.debug_tx {
+                                            tx.send(DebugEvent::tool_result(&id, call_id.clone(), &error_str));
+                                        }
+                                        ToolResult {
+                                            id,
+                                            call_id,
+                                            content: OneOrMany::one(ToolResultContent::text(error_str)),
+                                        }
+                                    }
+                                }
+                            }
+                        };
+                        tool_results.push(tool_result);
+                    }
+                    ToolCallConfirmation::Reject => {
+                        println!("{}", "conversation stopped".red());
+                        return;
+                    }
+                    ToolCallConfirmation::Feedback(text) => {
+                        tool_results.push(ToolResult {
+                            id,
+                            call_id,
+                            content: OneOrMany::one(ToolResultContent::text(format!(
+                                "user rejected tool call with feedback: {}",
+                                text
+                            ))),
+                        });
                         break;
                     }
                 }
-                maybe_item = stream.next() => {
-                    match maybe_item {
-                        Some(item) => {
-                            match item {
-                                Ok(rig::agent::MultiTurnStreamItem::StreamAssistantItem(content)) => {
-                                    match content {
-                                        StreamedAssistantContent::Text(text) => {
-                                            debug!(loop_index = self.loop_count, stream_index, kind="StreamedAssistantContent::Text", text = %text.text, "stream item received");
-                                            print!("{}", text.text);
-                                            response_text.push_str(&text.text);
-                                        }
-                                        StreamedAssistantContent::ToolCall(tool_call) => {
-                                            if !response_text.is_empty() {
-                                                self.chat_history.push(Message::assistant(&response_text));
-                                                if let Some(tx) = &self.debug_tx {
-                                                    tx.send(DebugEvent::assistant_text(&response_text));
-                                                }
-                                                response_text.clear();
-                                                println!();
-                                            }
+            }
 
-                                            debug!(loop_index = self.loop_count, stream_index, kind="StreamedAssistantContent::ToolCall", id = %tool_call.id, name = %tool_call.function.name, "stream item received");
-                                            let tool_call_content = AssistantContent::tool_call(
-                                                &tool_call.id,
-                                                &tool_call.function.name,
-                                                tool_call.function.arguments.clone(),
-                                            );
-                                            self.chat_history.push(Message::Assistant {
-                                                id: None,
-                                                content: OneOrMany::one(tool_call_content),
-                                            });
-                                            if let Some(tx) = &self.debug_tx {
-                                                tx.send(DebugEvent::tool_call(tool_call));
-                                            }
+            if tool_results.is_empty() {
+                break;
+            }
 
-                                        }
-                                        StreamedAssistantContent::ToolCallDelta { .. } => {
-                                            debug!(
-                                                loop_index = self.loop_count,
-                                                stream_index,
-                                                kind = "StreamedAssistantContent::ToolCallDelta",
-                                                "stream item received"
-                                            );
-                                        }
-                                        StreamedAssistantContent::Reasoning(reasoning) => {
-                                            debug!(
-                                                loop_index = self.loop_count,
-                                                stream_index,
-                                                kind = "StreamedAssistantContent::Reasoning",
-                                                "stream item received"
-                                            );
-                                            print!("\n{}", "[reasoning] ".cyan());
-                                            for r in &reasoning.reasoning {
-                                                print!("{}", r.to_string().cyan());
-                                            }
-                                            if let Some(tx) = &self.debug_tx {
-                                                tx.send(DebugEvent::reasoning(reasoning));
-                                            }
-                                        }
-                                        StreamedAssistantContent::ReasoningDelta { .. } => {
-                                            debug!(
-                                                loop_index = self.loop_count,
-                                                stream_index,
-                                                kind = "StreamedAssistantContent::ReasoningDelta",
-                                                "stream item received"
-                                            );
-                                        }
-                                        StreamedAssistantContent::Final(_) => {
-                                            debug!(
-                                                loop_index = self.loop_count,
-                                                stream_index,
-                                                kind = "StreamedAssistantContent::Final",
-                                                "stream item received"
-                                            );
-                                        }
-                                    }
-                                }
-                                Ok(MultiTurnStreamItem::StreamUserItem(user_content)) => match user_content {
-                                    StreamedUserContent::ToolResult(tool_result) => {
-                                        debug!(loop_index = self.loop_count, stream_index, kind="StreamedUserContent::ToolResult", id = %tool_result.id, "stream item received");
-                                        let tool_result_content = UserContent::tool_result(
-                                            tool_result.id,
-                                            tool_result.content,
-                                        );
-                                        self.chat_history.push(Message::User {
-                                            content: OneOrMany::one(tool_result_content),
-                                        });
-                                    }
-                                },
-                                Ok(MultiTurnStreamItem::FinalResponse(final_resp)) => {
-                                    debug!(
-                                        loop_index = self.loop_count,
-                                        stream_index,
-                                        kind = "MultiTurnStreamItem::FinalResponse",
-                                        "stream item received"
-                                    );
-                                    if !response_text.is_empty() {
-                                        if let Some(tx) = &self.debug_tx {
-                                            tx.send(DebugEvent::assistant_text(&response_text));
-                                        }
-                                        self.chat_history.push(Message::assistant(&response_text));
-                                        response_text.clear();
-                                    }
-                                    if let Some(tx) = &self.debug_tx {
-                                        tx.send(DebugEvent::turn_complete(final_resp.usage()));
-                                    }
-                                    println!();
-                                }
-                                Ok(_) => {
-                                    debug!(
-                                        loop_index = self.loop_count,
-                                        stream_index,
-                                        kind = "Ok(_unknown)",
-                                        "stream item received"
-                                    );
-                                }
-                                Err(e) => {
-                                    // TODO: ugly hack for now. proper error handling will require rig
-                                    // exporting agent::prompt_request::streaming::StreamingError
-                                    if e.to_string().contains("PromptCancelled") {
-                                        if let Some(Message::Assistant { content, .. }) = self.chat_history.last()
-                                            && let AssistantContent::ToolCall(_) = content.first()
-                                        {
-                                            self.chat_history.pop();
+            prompt = Message::User {
+                #[allow(clippy::expect_used)]
+                content: OneOrMany::many(
+                    tool_results
+                        .into_iter()
+                        .map(UserContent::ToolResult)
+                        .collect::<Vec<_>>(),
+                )
+                .expect("tool results should've been set as the next prompt"),
+            };
+        }
+    }
 
-                                            self.pending_prompt = self.hitl.take_feedback();
-                                            let feedback_text = match &self.pending_prompt {
-                                                Some(feedback) => {
-                                                    info!(loop_index = self.loop_count, err=%e, feedback, "user cancelled tool call and provided feedback");
-                                                    "tool call cancelled; continuing with your feedback"
-                                                }
-                                                None => {
-                                                    info!(loop_index = self.loop_count, err=%e, "user cancelled tool call loop");
-                                                    "tool call cancelled"
-                                                }
-                                            };
-                                            println!("{}", feedback_text.red());
-                                        }
+    async fn stream_llm_response(
+        &mut self,
+        prompt: Message,
+    ) -> anyhow::Result<(String, Vec<ToolCall>)> {
+        let request_builder = self
+            .agent
+            .completion(prompt.clone(), self.chat_history.clone())
+            .await
+            .context("couldn't build LLM request builder")?;
 
-                                        self.print_newline_before_prompt = false;
-                                    } else {
-                                        debug!(loop_index = self.loop_count, stream_index, kind="Err", error = %e, "stream item received");
-                                        print_error(anyhow::anyhow!(e));
-                                    }
-                                    break;
-                                }
-                            }
-                            stream_index += 1;
-                        },
-                        None => break,
+        let mut stream = request_builder
+            .stream()
+            .await
+            .context("couldn't build LLM request stream")?;
+
+        if let Some(tx) = &self.debug_tx {
+            tx.send(DebugEvent::llm_request(&prompt, &self.chat_history));
+        }
+
+        self.chat_history.push(prompt);
+
+        let mut response_text = String::new();
+
+        let mut tool_calls = vec![];
+
+        while let Some(result) = stream.next().await {
+            match result {
+                Ok(content) => match content {
+                    StreamedAssistantContent::Text(text) => {
+                        print!("{text}");
+                        response_text.push_str(&text.text);
                     }
-
+                    StreamedAssistantContent::ToolCall(tool_call) => {
+                        if let Some(tx) = &self.debug_tx {
+                            tx.send(DebugEvent::tool_call(tool_call.clone()));
+                        }
+                        tool_calls.push(tool_call);
+                    }
+                    StreamedAssistantContent::ToolCallDelta { .. } => {}
+                    StreamedAssistantContent::Reasoning(reasoning) => {
+                        print!("\n{}", "[reasoning] ".cyan());
+                        for r in &reasoning.reasoning {
+                            print!("{}", r.to_string().cyan());
+                        }
+                        if let Some(tx) = &self.debug_tx {
+                            tx.send(DebugEvent::reasoning(reasoning));
+                        }
+                    }
+                    StreamedAssistantContent::ReasoningDelta { .. } => {}
+                    StreamedAssistantContent::Final(_) => {
+                        if !response_text.is_empty()
+                            && let Some(tx) = &self.debug_tx
+                        {
+                            tx.send(DebugEvent::assistant_text(&response_text));
+                        }
+                        if let Some(tx) = &self.debug_tx {
+                            tx.send(DebugEvent::stream_complete());
+                        }
+                        println!();
+                    }
+                },
+                Err(e) => {
+                    anyhow::bail!(e);
                 }
             }
         }
 
-        if !response_text.is_empty() {
-            self.chat_history.push(Message::assistant(&response_text));
-            if let Some(tx) = &self.debug_tx {
-                tx.send(DebugEvent::assistant_text(&response_text));
-            }
+        Ok((response_text, tool_calls))
+    }
+
+    fn confirm_tool_call(&mut self) -> ToolCallConfirmation {
+        // TODO: temporary hack to skip HITL
+        if std::env::var("AGX_SKIP_HITL")
+            .map(|s| s == "1")
+            .unwrap_or_default()
+        {
+            return ToolCallConfirmation::Proceed;
         }
 
-        match serde_json::to_string_pretty(&self.chat_history) {
-            Ok(history) => {
-                let chat_history_file_path = self
-                    .chats_dir
-                    .join(format!("loop-{}.json", self.loop_count));
-                if let Err(e) = tokio::fs::write(&chat_history_file_path, history).await {
-                    error!(loop_index = self.loop_count, err=%e, "one agent loop done; couldn't write chat history to file")
+        match self
+            .editor
+            .readline("proceed? (enter=yes, n=stop, or type feedback) ")
+        {
+            Ok(input) => {
+                let trimmed = input.trim();
+                match trimmed {
+                    "" => ToolCallConfirmation::Proceed,
+                    "n" | "no" => ToolCallConfirmation::Reject,
+                    feedback => ToolCallConfirmation::Feedback(feedback.to_string()),
                 }
             }
-            Err(err) => {
-                error!(loop_index = self.loop_count, %err, "one agent loop done; couldn't serialize chat history")
-            }
+            Err(_) => ToolCallConfirmation::Reject,
         }
-
-        self.loop_count += 1;
     }
 }
 
 fn print_error(error: anyhow::Error) {
-    println!("{}", format!("Error: {:?}", error).red());
+    println!("{}", format!("error: {:?}", error).red());
 }

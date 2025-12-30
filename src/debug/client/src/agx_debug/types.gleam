@@ -26,7 +26,11 @@ pub type DebugEventPayload {
   AssistantTextEvent(text: String)
   ToolCallEvent(tool_call: ToolCallData)
   ReasoningEvent(reasoning: ReasoningData)
-  TurnComplete(usage: Usage)
+  ToolResultEvent(id: String, call_id: Option(String), content: String)
+  StreamComplete
+  TurnComplete(history: String)
+  Interrupted
+  NewSession
 }
 
 pub type ToolCallData {
@@ -44,10 +48,6 @@ pub type ReasoningData {
     reasoning: List(String),
     signature: option.Option(String),
   )
-}
-
-pub type Usage {
-  Usage(input_tokens: Int, output_tokens: Int, total_tokens: Int)
 }
 
 pub type Message {
@@ -107,7 +107,11 @@ fn debug_event_payload_decoder() -> Decoder(DebugEventPayload) {
     "assistant_text" -> assistant_text_payload_decoder()
     "tool_call" -> tool_call_payload_decoder()
     "reasoning" -> reasoning_payload_decoder()
+    "tool_result" -> tool_result_event_payload_decoder()
+    "stream_complete" -> stream_complete_payload_decoder()
     "turn_complete" -> turn_complete_payload_decoder()
+    "interrupted" -> interrupted_payload_decoder()
+    "new_session" -> new_session_payload_decoder()
     _ -> decode.failure(LlmRequest(UserMessage([]), ""), "unknown payload kind")
   }
 }
@@ -133,9 +137,32 @@ fn reasoning_payload_decoder() -> Decoder(DebugEventPayload) {
   decode.success(ReasoningEvent(reasoning:))
 }
 
+fn stream_complete_payload_decoder() -> Decoder(DebugEventPayload) {
+  decode.success(StreamComplete)
+}
+
 fn turn_complete_payload_decoder() -> Decoder(DebugEventPayload) {
-  use usage <- decode.field("usage", usage_decoder())
-  decode.success(TurnComplete(usage:))
+  use history <- decode.field("history", raw_json_decoder())
+  decode.success(TurnComplete(history:))
+}
+
+fn interrupted_payload_decoder() -> Decoder(DebugEventPayload) {
+  decode.success(Interrupted)
+}
+
+fn new_session_payload_decoder() -> Decoder(DebugEventPayload) {
+  decode.success(NewSession)
+}
+
+fn tool_result_event_payload_decoder() -> Decoder(DebugEventPayload) {
+  use id <- decode.field("id", decode.string)
+  use call_id <- decode.optional_field(
+    "call_id",
+    option.None,
+    decode.optional(decode.string),
+  )
+  use content <- decode.field("content", decode.string)
+  decode.success(ToolResultEvent(id:, call_id:, content:))
 }
 
 fn tool_call_data_decoder() -> Decoder(ToolCallData) {
@@ -167,13 +194,6 @@ fn reasoning_data_decoder() -> Decoder(ReasoningData) {
     decode.optional(decode.string),
   )
   decode.success(ReasoningData(id:, reasoning:, signature:))
-}
-
-fn usage_decoder() -> Decoder(Usage) {
-  use input_tokens <- decode.field("input_tokens", decode.int)
-  use output_tokens <- decode.field("output_tokens", decode.int)
-  use total_tokens <- decode.field("total_tokens", decode.int)
-  decode.success(Usage(input_tokens:, output_tokens:, total_tokens:))
 }
 
 fn message_decoder() -> Decoder(Message) {

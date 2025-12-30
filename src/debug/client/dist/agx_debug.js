@@ -5147,7 +5147,11 @@ function start3(app, selector, start_args) {
 }
 // build/dev/javascript/agx_debug/agx_debug/ffi/json.mjs
 function stringify(value) {
-  return JSON.stringify(value, null, 2);
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
 }
 function tryPrettyPrint(str) {
   try {
@@ -5218,11 +5222,25 @@ class ReasoningEvent extends CustomType {
     this.reasoning = reasoning;
   }
 }
-class TurnComplete extends CustomType {
-  constructor(usage) {
+class ToolResultEvent extends CustomType {
+  constructor(id2, call_id, content) {
     super();
-    this.usage = usage;
+    this.id = id2;
+    this.call_id = call_id;
+    this.content = content;
   }
+}
+class StreamComplete extends CustomType {
+}
+class TurnComplete extends CustomType {
+  constructor(history) {
+    super();
+    this.history = history;
+  }
+}
+class Interrupted extends CustomType {
+}
+class NewSession extends CustomType {
 }
 class ToolCallData extends CustomType {
   constructor(id2, call_id, function$, signature) {
@@ -5239,14 +5257,6 @@ class ReasoningData extends CustomType {
     this.id = id2;
     this.reasoning = reasoning;
     this.signature = signature;
-  }
-}
-class Usage extends CustomType {
-  constructor(input_tokens, output_tokens, total_tokens) {
-    super();
-    this.input_tokens = input_tokens;
-    this.output_tokens = output_tokens;
-    this.total_tokens = total_tokens;
   }
 }
 class UserMessage extends CustomType {
@@ -5335,6 +5345,24 @@ function assistant_text_payload_decoder() {
     return success(new AssistantTextEvent(text4));
   });
 }
+function stream_complete_payload_decoder() {
+  return success(new StreamComplete);
+}
+function interrupted_payload_decoder() {
+  return success(new Interrupted);
+}
+function new_session_payload_decoder() {
+  return success(new NewSession);
+}
+function tool_result_event_payload_decoder() {
+  return field("id", string2, (id2) => {
+    return optional_field("call_id", new None, optional(string2), (call_id) => {
+      return field("content", string2, (content) => {
+        return success(new ToolResultEvent(id2, call_id, content));
+      });
+    });
+  });
+}
 function reasoning_data_decoder() {
   return optional_field("id", new None, optional(string2), (id2) => {
     return field("reasoning", list2(string2), (reasoning) => {
@@ -5347,20 +5375,6 @@ function reasoning_data_decoder() {
 function reasoning_payload_decoder() {
   return field("reasoning", reasoning_data_decoder(), (reasoning) => {
     return success(new ReasoningEvent(reasoning));
-  });
-}
-function usage_decoder() {
-  return field("input_tokens", int2, (input_tokens) => {
-    return field("output_tokens", int2, (output_tokens) => {
-      return field("total_tokens", int2, (total_tokens) => {
-        return success(new Usage(input_tokens, output_tokens, total_tokens));
-      });
-    });
-  });
-}
-function turn_complete_payload_decoder() {
-  return field("usage", usage_decoder(), (usage) => {
-    return success(new TurnComplete(usage));
   });
 }
 function user_text_decoder() {
@@ -5385,6 +5399,11 @@ function reasoning_decoder() {
 function raw_json_decoder() {
   let _pipe = dynamic;
   return map2(_pipe, stringify);
+}
+function turn_complete_payload_decoder() {
+  return field("history", raw_json_decoder(), (history) => {
+    return success(new TurnComplete(history));
+  });
 }
 function tool_function_decoder() {
   return field("name", string2, (name) => {
@@ -5512,8 +5531,16 @@ function debug_event_payload_decoder() {
       return tool_call_payload_decoder();
     } else if (kind === "reasoning") {
       return reasoning_payload_decoder();
+    } else if (kind === "tool_result") {
+      return tool_result_event_payload_decoder();
+    } else if (kind === "stream_complete") {
+      return stream_complete_payload_decoder();
     } else if (kind === "turn_complete") {
       return turn_complete_payload_decoder();
+    } else if (kind === "interrupted") {
+      return interrupted_payload_decoder();
+    } else if (kind === "new_session") {
+      return new_session_payload_decoder();
     } else {
       return failure(new LlmRequest(new UserMessage(toList([])), ""), "unknown payload kind");
     }
@@ -5571,7 +5598,7 @@ function scroll_to_element2(id2) {
 
 // build/dev/javascript/agx_debug/agx_debug/model.mjs
 function default_controls() {
-  return new Controls(true);
+  return new Controls(false);
 }
 function init_model() {
   return new Model(toList([]), default_controls());
@@ -5650,13 +5677,21 @@ function payload_kind_and_color(payload) {
   if (payload instanceof LlmRequest) {
     return ["llm_request", "#fe8019"];
   } else if (payload instanceof AssistantTextEvent) {
-    return ["assistant_text", "#d5c4a1"];
+    return ["assistant_text", "#fbf1c7"];
   } else if (payload instanceof ToolCallEvent) {
     return ["tool_call", "#d3869b"];
   } else if (payload instanceof ReasoningEvent) {
-    return ["reasoning", "#83a598"];
+    return ["reasoning", "#8ec07c"];
+  } else if (payload instanceof ToolResultEvent) {
+    return ["tool_result", "#b8bb26"];
+  } else if (payload instanceof StreamComplete) {
+    return ["stream_complete", "#fabd2f"];
+  } else if (payload instanceof TurnComplete) {
+    return ["turn_complete", "#83a598"];
+  } else if (payload instanceof Interrupted) {
+    return ["interrupted", "#fb4934"];
   } else {
-    return ["turn_complete", "#b8bb26"];
+    return ["new_session", "#bdae93"];
   }
 }
 function minimap_marker(event4, index4) {
@@ -5732,28 +5767,46 @@ function render_reasoning_data(reasoning) {
   reasoning_list = reasoning.reasoning;
   return div(toList([class$("p-2 bg-[#3c3836] rounded italic text-sm")]), toList([text2(join(reasoning_list, " "))]));
 }
-function render_usage(usage) {
-  let input_tokens;
-  let output_tokens;
-  let total_tokens;
-  input_tokens = usage.input_tokens;
-  output_tokens = usage.output_tokens;
-  total_tokens = usage.total_tokens;
+function render_tool_result_event(id2, content) {
   return div(toList([class$("p-2 bg-[#3c3836] rounded")]), toList([
-    div(toList([class$("flex gap-4 text-sm")]), toList([
-      span(toList([]), toList([
-        span(toList([class$("text-[#a89984]")]), toList([text2("input tokens: ")])),
-        text2(to_string(input_tokens))
-      ])),
-      span(toList([]), toList([
-        span(toList([class$("text-[#a89984]")]), toList([text2("output tokens: ")])),
-        text2(to_string(output_tokens))
-      ])),
-      span(toList([]), toList([
-        span(toList([class$("text-[#a89984]")]), toList([text2("total tokens: ")])),
-        text2(to_string(total_tokens))
-      ]))
+    div(toList([class$("flex gap-2 items-center mb-1")]), toList([
+      span(toList([class$("text-xs text-[#a89984]")]), toList([text2("id: " + id2)]))
+    ])),
+    pre(toList([
+      class$("text-xs bg-[#282828] p-1 rounded whitespace-pre-wrap break-all max-h-[50vh] overflow-auto")
+    ]), toList([text3(content)]))
+  ]));
+}
+function render_stream_complete() {
+  return div(toList([
+    class$("p-2 bg-[#3c3836] rounded text-sm text-[#a89984]")
+  ]), toList([text2("Stream complete")]));
+}
+function render_turn_complete(history) {
+  return div(toList([class$("flex flex-col gap-2")]), toList([
+    div(toList([
+      class$("p-2 bg-[#3c3836] rounded text-sm text-[#a89984]")
+    ]), toList([text2("Turn complete")])),
+    div(toList([]), toList([
+      div(toList([
+        class$("text-sm font-semibold text-[#a89984] mb-1")
+      ]), toList([text2("History")])),
+      pre(toList([
+        class$("p-2 bg-[#3c3836] text-[#ebdbb2] rounded text-xs whitespace-pre-wrap break-all max-h-[50vh] overflow-auto")
+      ]), toList([text3(history)]))
     ]))
+  ]));
+}
+function render_interrupted() {
+  return div(toList([
+    class$("p-2 bg-[#3c3836] rounded text-sm text-[#fb4934]")
+  ]), toList([text2("User interrupted")]));
+}
+function render_new_session() {
+  return div(toList([class$("flex items-center gap-4 py-2")]), toList([
+    div(toList([class$("flex-1 h-px bg-[#504945]")]), toList([])),
+    span(toList([class$("text-sm text-[#a89984] font-semibold")]), toList([text2("New Session")])),
+    div(toList([class$("flex-1 h-px bg-[#504945]")]), toList([]))
   ]));
 }
 function render_tool_result_content(content) {
@@ -5880,9 +5933,19 @@ function render_payload(payload) {
   } else if (payload instanceof ReasoningEvent) {
     let reasoning = payload.reasoning;
     return render_reasoning_data(reasoning);
+  } else if (payload instanceof ToolResultEvent) {
+    let id2 = payload.id;
+    let content = payload.content;
+    return render_tool_result_event(id2, content);
+  } else if (payload instanceof StreamComplete) {
+    return render_stream_complete();
+  } else if (payload instanceof TurnComplete) {
+    let history = payload.history;
+    return render_turn_complete(history);
+  } else if (payload instanceof Interrupted) {
+    return render_interrupted();
   } else {
-    let usage = payload.usage;
-    return render_usage(usage);
+    return render_new_session();
   }
 }
 function render_event_details(event4, index4) {

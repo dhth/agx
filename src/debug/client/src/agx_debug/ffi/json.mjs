@@ -1,5 +1,9 @@
 export function stringify(value) {
-  return JSON.stringify(value, null, 2);
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
 }
 
 export function tryPrettyPrint(str) {
