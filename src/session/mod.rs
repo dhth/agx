@@ -171,13 +171,14 @@ where
         loop {
             let (response_text, tool_calls) = tokio::select! {
                 Ok(_) = tokio::signal::ctrl_c() => {
-                    println!("{}", "\ninterrupted".red());
+                    println!("{}", "\ninterrupted (prompt discarded)".red());
                     if let Some(tx) = &self.debug_tx {
                         tx.send(DebugEvent::interrupted());
                     }
                     return;
                 }
                 result = self.stream_llm_response(prompt.clone()) => {
+                    self.chat_history.push(prompt);
                     match result {
                         Ok(r) => r,
                         Err(e) => {
@@ -364,8 +365,6 @@ where
         if let Some(tx) = &self.debug_tx {
             tx.send(DebugEvent::llm_request(&prompt, &self.chat_history));
         }
-
-        self.chat_history.push(prompt);
 
         let mut response_text = String::new();
 
