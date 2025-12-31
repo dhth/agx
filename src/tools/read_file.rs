@@ -1,4 +1,3 @@
-use colored::Colorize;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::{Deserialize, Serialize};
@@ -7,7 +6,7 @@ use tracing::{Level, instrument, trace};
 
 #[derive(Debug, Deserialize)]
 pub struct ReadFileArgs {
-    path: String,
+    pub path: String,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -44,21 +43,20 @@ impl Tool for ReadFileTool {
 
     #[instrument(level = Level::TRACE, name = "tool-call: read_file", err(level = Level::ERROR), skip(self))]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let log = format!("read file ({})", args.path).cyan();
-        let result = self.call_inner(args).await;
-        let status = if result.is_ok() { "✓" } else { "❌" };
-        println!("{} {}", log, status,);
-
-        result
-    }
-}
-
-impl ReadFileTool {
-    async fn call_inner(&self, args: ReadFileArgs) -> Result<String, ReadFileError> {
         let contents = tokio::fs::read_to_string(&args.path).await?;
 
         trace!(bytes_read = contents.len(), "file read successfully");
 
         Ok(contents)
+    }
+}
+
+impl ReadFileTool {
+    pub fn repr(args: &ReadFileArgs) -> String {
+        format!("read_file: {}", args.path)
+    }
+
+    pub fn details(_args: &ReadFileArgs) -> Option<String> {
+        None
     }
 }

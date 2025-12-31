@@ -1,5 +1,4 @@
 use crate::helpers::is_path_in_workspace;
-use colored::Colorize;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::{Deserialize, Serialize};
@@ -48,7 +47,7 @@ pub struct CreateFileTool;
 #[derive(Debug, Serialize)]
 pub struct CreateFileResponse {
     path: String,
-    num_bytes_written: usize,
+    pub num_bytes_written: usize,
 }
 
 impl Tool for CreateFileTool {
@@ -80,20 +79,6 @@ impl Tool for CreateFileTool {
 
     #[instrument(level = Level::TRACE, name = "tool-call: create_file", ret, err(level = Level::ERROR), skip(self))]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let log = format!("created file ({})", args.path).cyan();
-        let result = self.call_inner(args).await;
-        let status = if result.is_ok() { "✓" } else { "❌" };
-        println!("{} {}", log, status,);
-
-        result
-    }
-}
-
-impl CreateFileTool {
-    async fn call_inner(
-        &self,
-        args: CreateFileArgs,
-    ) -> Result<CreateFileResponse, CreateFileError> {
         if args.path.is_empty() {
             // TODO: encode this in the type system
             return Err(CreateFileError::InvalidInput(
@@ -133,5 +118,15 @@ impl CreateFileTool {
             path: path.to_string_lossy().to_string(),
             num_bytes_written: contents.len(),
         })
+    }
+}
+
+impl CreateFileTool {
+    pub fn repr(args: &CreateFileArgs) -> String {
+        format!("create_file: {}", args.path)
+    }
+
+    pub fn details(args: &CreateFileArgs) -> Option<String> {
+        Some(args.contents.clone())
     }
 }

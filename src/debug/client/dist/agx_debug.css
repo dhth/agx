@@ -244,6 +244,9 @@
   .h-8 {
     height: calc(var(--spacing) * 8);
   }
+  .h-px {
+    height: 1px;
+  }
   .max-h-\[50vh\] {
     max-height: 50vh;
   }
@@ -336,6 +339,9 @@
   .bg-\[\#282828\] {
     background-color: #282828;
   }
+  .bg-\[\#504945\] {
+    background-color: #504945;
+  }
   .bg-\[\#b16286\] {
     background-color: #b16286;
   }
@@ -408,6 +414,9 @@
   }
   .text-\[\#ebdbb2\] {
     color: #ebdbb2;
+  }
+  .text-\[\#fb4934\] {
+    color: #fb4934;
   }
   .italic {
     font-style: italic;

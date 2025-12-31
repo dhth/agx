@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
-use rig::completion::Usage;
-use rig::message::{Message, Reasoning, ToolCall};
+use rig::message::{Message, Reasoning, ToolCall, ToolResult};
 use serde::Serialize;
 use tokio::sync::broadcast::{Receiver, Sender};
 
@@ -26,9 +25,13 @@ pub enum DebugEventPayload {
     Reasoning {
         reasoning: Reasoning,
     },
+    ToolResult(ToolResult),
+    StreamComplete,
     TurnComplete {
-        usage: Usage,
+        history: Vec<Message>,
     },
+    Interrupted,
+    NewSession,
 }
 
 impl DebugEvent {
@@ -51,8 +54,26 @@ impl DebugEvent {
         Self::new(DebugEventPayload::Reasoning { reasoning })
     }
 
-    pub fn turn_complete(usage: Usage) -> Self {
-        Self::new(DebugEventPayload::TurnComplete { usage })
+    pub fn tool_result(result: &ToolResult) -> Self {
+        Self::new(DebugEventPayload::ToolResult(result.clone()))
+    }
+
+    pub fn stream_complete() -> Self {
+        Self::new(DebugEventPayload::StreamComplete)
+    }
+
+    pub fn turn_complete(history: &[Message]) -> Self {
+        Self::new(DebugEventPayload::TurnComplete {
+            history: history.to_vec(),
+        })
+    }
+
+    pub fn interrupted() -> Self {
+        Self::new(DebugEventPayload::Interrupted)
+    }
+
+    pub fn new_session() -> Self {
+        Self::new(DebugEventPayload::NewSession)
     }
 
     fn new(payload: DebugEventPayload) -> Self {

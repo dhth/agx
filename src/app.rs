@@ -4,7 +4,6 @@ use crate::env::{get_env_var, get_optional_env_var};
 use crate::helpers::{get_project_context, path_to_dirname};
 use crate::providers::copilot;
 use crate::session::Session;
-use crate::tools::cancel::cancellation_channel;
 use crate::tools::{CreateFileTool, EditFileTool, ReadDirTool, ReadFileTool, RunCmdTool};
 use anyhow::Context;
 use colored::Colorize;
@@ -44,9 +43,6 @@ The following is context specific to this project:
         )),
         None => Cow::Borrowed(SYSTEM_PROMPT),
     };
-
-    let (cancel_tx, cancel_rx) = cancellation_channel();
-    let run_cmd_tool = RunCmdTool::new(cancel_rx);
 
     tokio::fs::create_dir_all(&project_log_dir)
         .await
@@ -93,18 +89,11 @@ The following is context specific to this project:
                 .tool(EditFileTool)
                 .tool(ReadDirTool)
                 .tool(ReadFileTool)
-                .tool(run_cmd_tool)
+                .tool(RunCmdTool)
                 .build();
 
-            let mut session = Session::new(
-                agent,
-                cwd,
-                project_log_dir,
-                provider,
-                &model_name,
-                cancel_tx,
-                debug_tx,
-            );
+            let mut session =
+                Session::new(agent, cwd, project_log_dir, provider, &model_name, debug_tx)?;
             session.run().await?;
         }
         Provider::Openrouter => {
@@ -121,18 +110,11 @@ The following is context specific to this project:
                 .tool(EditFileTool)
                 .tool(ReadDirTool)
                 .tool(ReadFileTool)
-                .tool(run_cmd_tool)
+                .tool(RunCmdTool)
                 .build();
 
-            let mut session = Session::new(
-                agent,
-                cwd,
-                project_log_dir,
-                provider,
-                &model_name,
-                cancel_tx,
-                debug_tx,
-            );
+            let mut session =
+                Session::new(agent, cwd, project_log_dir, provider, &model_name, debug_tx)?;
             session.run().await?;
         }
         Provider::Anthropic => {
@@ -150,18 +132,11 @@ The following is context specific to this project:
                 .tool(EditFileTool)
                 .tool(ReadDirTool)
                 .tool(ReadFileTool)
-                .tool(run_cmd_tool)
+                .tool(RunCmdTool)
                 .build();
 
-            let mut session = Session::new(
-                agent,
-                cwd,
-                project_log_dir,
-                provider,
-                &model_name,
-                cancel_tx,
-                debug_tx,
-            );
+            let mut session =
+                Session::new(agent, cwd, project_log_dir, provider, &model_name, debug_tx)?;
             session.run().await?;
         }
         Provider::GitHubCopilot => {
@@ -193,18 +168,11 @@ The following is context specific to this project:
                 .tool(EditFileTool)
                 .tool(ReadDirTool)
                 .tool(ReadFileTool)
-                .tool(run_cmd_tool)
+                .tool(RunCmdTool)
                 .build();
 
-            let mut session = Session::new(
-                agent,
-                cwd,
-                project_log_dir,
-                provider,
-                &model_name,
-                cancel_tx,
-                debug_tx,
-            );
+            let mut session =
+                Session::new(agent, cwd, project_log_dir, provider, &model_name, debug_tx)?;
             session.run().await?;
         }
     }

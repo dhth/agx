@@ -5,5 +5,5 @@ pub fn init_model() -> Model {
 }
 
 fn default_controls() -> Controls {
-  Controls(scroll_to_new_event: True)
+  Controls(scroll_to_new_event: False)
 }

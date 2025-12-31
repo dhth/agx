@@ -1,4 +1,3 @@
-use colored::Colorize;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::{Deserialize, Serialize};
@@ -22,7 +21,7 @@ pub struct DirEntry {
 
 #[derive(Debug, Deserialize)]
 pub struct ReadDirArgs {
-    path: String,
+    pub path: String,
 }
 
 impl std::fmt::Display for ReadDirArgs {
@@ -73,17 +72,6 @@ impl Tool for ReadDirTool {
 
     #[instrument(level = Level::TRACE, name = "tool-call: read_dir", ret, err(level = Level::ERROR), skip(self))]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let log = format!("read directory ({})", args.path).cyan();
-        let result = self.call_inner(args).await;
-        let status = if result.is_ok() { "✓" } else { "❌" };
-        println!("{} {}", log, status,);
-
-        result
-    }
-}
-
-impl ReadDirTool {
-    async fn call_inner(&self, args: ReadDirArgs) -> Result<Vec<DirEntry>, ReadDirError> {
         let metadata = tokio::fs::metadata(&args.path).await?;
         if !metadata.is_dir() {
             return Err(ReadDirError::PathNotADir);
@@ -121,5 +109,15 @@ impl ReadDirTool {
         }
 
         Ok(entries)
+    }
+}
+
+impl ReadDirTool {
+    pub fn repr(args: &ReadDirArgs) -> String {
+        format!("read_dir: {}", args.path)
+    }
+
+    pub fn details(_args: &ReadDirArgs) -> Option<String> {
+        None
     }
 }
