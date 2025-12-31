@@ -178,9 +178,11 @@ where
                     return;
                 }
                 result = self.stream_llm_response(prompt.clone()) => {
-                    self.chat_history.push(prompt);
                     match result {
-                        Ok(r) => r,
+                        Ok(r) => {
+                            self.chat_history.push(prompt);
+                            r
+                        },
                         Err(e) => {
                             print_error(e);
                             break;
