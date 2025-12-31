@@ -5666,7 +5666,7 @@ function minimap_marker(event4, index4) {
   kind = $[0];
   color = $[1];
   return div(toList([
-    class$("w-16 h-5 mx-auto my-px rounded-sm flex-shrink cursor-pointer hover:opacity-80"),
+    class$("w-16 h-5 min-h-2 mx-auto my-px rounded-sm flex-shrink cursor-pointer hover:opacity-80"),
     style("background-color", color),
     title(kind),
     on_click(new ScrollToEvent(index4))
@@ -5675,7 +5675,7 @@ function minimap_marker(event4, index4) {
 function minimap(events) {
   let reversed_events = reverse(events);
   return div(toList([
-    class$("fixed left-0 top-0 bottom-8 w-20 bg-[#282828] border-r border-[#3c3836] flex flex-col py-2 z-40 overflow-hidden")
+    class$("fixed left-0 top-0 bottom-8 w-20 bg-[#282828] border-r border-[#3c3836] flex flex-col py-2 z-40 overflow-y-auto")
   ]), index_map(reversed_events, minimap_marker));
 }
 function format_timestamp(timestamp) {

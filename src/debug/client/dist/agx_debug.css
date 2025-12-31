@@ -250,6 +250,9 @@
   .max-h-\[50vh\] {
     max-height: 50vh;
   }
+  .min-h-2 {
+    min-height: calc(var(--spacing) * 2);
+  }
   .min-h-screen {
     min-height: 100vh;
   }
@@ -310,8 +313,8 @@
   .overflow-auto {
     overflow: auto;
   }
-  .overflow-hidden {
-    overflow: hidden;
+  .overflow-y-auto {
+    overflow-y: auto;
   }
   .rounded {
     border-radius: 0.25rem;

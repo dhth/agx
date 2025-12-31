@@ -61,7 +61,7 @@ fn minimap(events: List(DebugEvent)) -> element.Element(Msg) {
   html.div(
     [
       attribute.class(
-        "fixed left-0 top-0 bottom-8 w-20 bg-[#282828] border-r border-[#3c3836] flex flex-col py-2 z-40 overflow-hidden",
+        "fixed left-0 top-0 bottom-8 w-20 bg-[#282828] border-r border-[#3c3836] flex flex-col py-2 z-40 overflow-y-auto",
       ),
     ],
     list.index_map(reversed_events, minimap_marker),
@@ -74,7 +74,7 @@ fn minimap_marker(event: DebugEvent, index: Int) -> element.Element(Msg) {
   html.div(
     [
       attribute.class(
-        "w-16 h-5 mx-auto my-px rounded-sm flex-shrink cursor-pointer hover:opacity-80",
+        "w-16 h-5 min-h-2 mx-auto my-px rounded-sm flex-shrink cursor-pointer hover:opacity-80",
       ),
       attribute.style("background-color", color),
       attribute.title(kind),
