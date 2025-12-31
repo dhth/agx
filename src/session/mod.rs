@@ -232,32 +232,23 @@ where
                     }
                 };
 
-                println!(
-                    "{}",
-                    format!("[tool call] {}", tool_call.repr()).bright_purple()
-                );
-
-                let details = match tool_call.details().await {
-                    Ok(d) => d,
-                    Err(e) => {
-                        tool_results.push(ToolResult {
-                            id,
-                            call_id,
-                            content: OneOrMany::one(ToolResultContent::text(format!(
-                                "tool call failed: {}",
-                                e.message()
-                            ))),
-                        });
-                        continue;
-                    }
-                };
-
-                if let Some(info) = details {
-                    println!("{}", info);
-                }
-
                 let confirmation = if tool_call.needs_confirmation() {
-                    self.confirm_tool_call()
+                    let details = match tool_call.details().await {
+                        Ok(d) => d,
+                        Err(e) => {
+                            tool_results.push(ToolResult {
+                                id,
+                                call_id,
+                                content: OneOrMany::one(ToolResultContent::text(format!(
+                                    "tool call failed: {}",
+                                    e.message()
+                                ))),
+                            });
+                            continue;
+                        }
+                    };
+
+                    self.confirm_tool_call(&tool_call.repr(), details.as_deref())
                 } else {
                     ToolCallConfirmation::Proceed
                 };
@@ -384,6 +375,9 @@ where
             match result {
                 Ok(content) => match content {
                     StreamedAssistantContent::Text(text) => {
+                        if response_text.is_empty() {
+                            println!();
+                        }
                         print!("{text}");
                         response_text.push_str(&text.text);
                     }
@@ -425,7 +419,7 @@ where
         Ok((response_text, tool_calls))
     }
 
-    fn confirm_tool_call(&mut self) -> ToolCallConfirmation {
+    fn confirm_tool_call(&mut self, repr: &str, details: Option<&str>) -> ToolCallConfirmation {
         // TODO: temporary hack to skip HITL
         if std::env::var("AGX_SKIP_HITL")
             .map(|s| s == "1")
@@ -434,14 +428,22 @@ where
             return ToolCallConfirmation::Proceed;
         }
 
-        match self
-            .editor
-            .readline("proceed? (enter=yes, n=stop, or type feedback) ")
-        {
+        println!(
+            "{}",
+            format!("[request for tool-call] {}", repr).bright_purple()
+        );
+
+        if let Some(info) = details {
+            println!("{}", info);
+        }
+
+        match self.editor.readline(
+            "press 'y'/<enter> to proceed, type 'n/no' to reject, or type your feedback: ",
+        ) {
             Ok(input) => {
                 let trimmed = input.trim();
                 match trimmed {
-                    "" => ToolCallConfirmation::Proceed,
+                    "" | "y" => ToolCallConfirmation::Proceed,
                     "n" | "no" => ToolCallConfirmation::Reject,
                     feedback => ToolCallConfirmation::Feedback(feedback.to_string()),
                 }
