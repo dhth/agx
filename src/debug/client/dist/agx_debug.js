@@ -5153,14 +5153,6 @@ function stringify(value) {
     return String(value);
   }
 }
-function tryPrettyPrint(str) {
-  try {
-    const parsed = JSON.parse(str);
-    return JSON.stringify(parsed, null, 2);
-  } catch {
-    return str;
-  }
-}
 
 // build/dev/javascript/agx_debug/agx_debug/types.mjs
 class Controls extends CustomType {
@@ -5292,18 +5284,6 @@ class UnsupportedUserContent extends CustomType {
     this.raw = raw;
   }
 }
-class ToolResultText extends CustomType {
-  constructor(text4) {
-    super();
-    this.text = text4;
-  }
-}
-class UnsupportedToolResultContent extends CustomType {
-  constructor(raw) {
-    super();
-    this.raw = raw;
-  }
-}
 class AssistantText extends CustomType {
   constructor(text4) {
     super();
@@ -5354,15 +5334,6 @@ function interrupted_payload_decoder() {
 function new_session_payload_decoder() {
   return success(new NewSession);
 }
-function tool_result_event_payload_decoder() {
-  return field("id", string2, (id2) => {
-    return optional_field("call_id", new None, optional(string2), (call_id) => {
-      return field("content", string2, (content) => {
-        return success(new ToolResultEvent(id2, call_id, content));
-      });
-    });
-  });
-}
 function reasoning_data_decoder() {
   return optional_field("id", new None, optional(string2), (id2) => {
     return field("reasoning", list2(string2), (reasoning) => {
@@ -5403,6 +5374,43 @@ function raw_json_decoder() {
 function turn_complete_payload_decoder() {
   return field("history", raw_json_decoder(), (history) => {
     return success(new TurnComplete(history));
+  });
+}
+function tool_result_event_payload_decoder() {
+  return field("id", string2, (id2) => {
+    return optional_field("call_id", new None, optional(string2), (call_id) => {
+      return field("content", raw_json_decoder(), (content) => {
+        return success(new ToolResultEvent(id2, call_id, content));
+      });
+    });
+  });
+}
+function tool_result_decoder() {
+  return field("id", string2, (id2) => {
+    return optional_field("call_id", new None, optional(string2), (call_id) => {
+      return field("content", raw_json_decoder(), (content) => {
+        return success(new ToolResult(id2, call_id, content));
+      });
+    });
+  });
+}
+function user_content_decoder() {
+  return field("type", string2, (type_field) => {
+    if (type_field === "text") {
+      return user_text_decoder();
+    } else if (type_field === "toolresult") {
+      return tool_result_decoder();
+    } else {
+      let _pipe = raw_json_decoder();
+      return map2(_pipe, (var0) => {
+        return new UnsupportedUserContent(var0);
+      });
+    }
+  });
+}
+function user_message_decoder() {
+  return field("content", list2(user_content_decoder()), (content) => {
+    return success(new UserMessage(content));
   });
 }
 function tool_function_decoder() {
@@ -5456,51 +5464,6 @@ function assistant_message_decoder() {
     return field("content", list2(assistant_content_decoder()), (content) => {
       return success(new AssistantMessage(id2, content));
     });
-  });
-}
-function tool_result_text_decoder() {
-  return field("text", string2, (text4) => {
-    return success(new ToolResultText(tryPrettyPrint(text4)));
-  });
-}
-function tool_result_content_decoder() {
-  return field("type", string2, (type_field) => {
-    if (type_field === "text") {
-      return tool_result_text_decoder();
-    } else {
-      let _pipe = raw_json_decoder();
-      return map2(_pipe, (var0) => {
-        return new UnsupportedToolResultContent(var0);
-      });
-    }
-  });
-}
-function tool_result_decoder() {
-  return field("id", string2, (id2) => {
-    return optional_field("call_id", new None, optional(string2), (call_id) => {
-      return field("content", list2(tool_result_content_decoder()), (content) => {
-        return success(new ToolResult(id2, call_id, content));
-      });
-    });
-  });
-}
-function user_content_decoder() {
-  return field("type", string2, (type_field) => {
-    if (type_field === "text") {
-      return user_text_decoder();
-    } else if (type_field === "toolresult") {
-      return tool_result_decoder();
-    } else {
-      let _pipe = raw_json_decoder();
-      return map2(_pipe, (var0) => {
-        return new UnsupportedUserContent(var0);
-      });
-    }
-  });
-}
-function user_message_decoder() {
-  return field("content", list2(user_content_decoder()), (content) => {
-    return success(new UserMessage(content));
   });
 }
 function message_decoder() {
@@ -5809,19 +5772,6 @@ function render_new_session() {
     div(toList([class$("flex-1 h-px bg-[#504945]")]), toList([]))
   ]));
 }
-function render_tool_result_content(content) {
-  if (content instanceof ToolResultText) {
-    let text4 = content.text;
-    return pre(toList([
-      class$("text-xs bg-[#282828] p-1 rounded whitespace-pre-wrap break-all")
-    ]), toList([text3(text4)]));
-  } else {
-    let raw = content.raw;
-    return pre(toList([
-      class$("text-xs bg-[#282828] p-1 rounded whitespace-pre-wrap break-all")
-    ]), toList([text3(raw)]));
-  }
-}
 function render_user_content(content) {
   if (content instanceof UserText) {
     let text4 = content.text;
@@ -5833,7 +5783,9 @@ function render_user_content(content) {
       span(toList([
         class$("font-mono text-xs bg-[#282828] px-1 rounded")
       ]), toList([text2("tool_result: " + id2)])),
-      div(toList([class$("mt-1")]), map(inner, render_tool_result_content))
+      pre(toList([
+        class$("mt-1 text-xs bg-[#282828] p-1 rounded whitespace-pre-wrap break-all")
+      ]), toList([text3(inner)]))
     ]));
   } else {
     let raw = content.raw;

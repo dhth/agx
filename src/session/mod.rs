@@ -216,21 +216,19 @@ where
 
             let mut tool_results = vec![];
 
-            for tool_call in tool_calls {
+            for (i, tool_call) in tool_calls.iter().enumerate() {
                 let id = tool_call.id.clone();
                 let call_id = tool_call.call_id.clone();
 
-                let tool_call = match AgxToolCall::try_from(tool_call) {
+                let tool_call = match AgxToolCall::try_from(tool_call.clone()) {
                     Ok(t) => t,
                     Err(e) => {
-                        tool_results.push(ToolResult {
+                        let result = make_tool_result(
                             id,
                             call_id,
-                            content: OneOrMany::one(ToolResultContent::text(format!(
-                                "failed to parse tool call: {}",
-                                e
-                            ))),
-                        });
+                            format!("failed to parse tool call: {e}"),
+                        );
+                        self.push_tool_result(&mut tool_results, result);
                         continue;
                     }
                 };
@@ -239,14 +237,8 @@ where
                     let details = match tool_call.details().await {
                         Ok(d) => d,
                         Err(e) => {
-                            tool_results.push(ToolResult {
-                                id,
-                                call_id,
-                                content: OneOrMany::one(ToolResultContent::text(format!(
-                                    "tool call failed: {}",
-                                    e.message()
-                                ))),
-                            });
+                            let result = make_tool_result(id, call_id, e.to_string());
+                            self.push_tool_result(&mut tool_results, result);
                             continue;
                         }
                     };
@@ -258,19 +250,25 @@ where
 
                 match confirmation {
                     ToolCallConfirmation::Proceed => {
-                        let tool_result = tokio::select! {
+                        tokio::select! {
                             Ok(_) = tokio::signal::ctrl_c() => {
                                 println!("{}", "\ninterrupted".red());
+                                let result = make_tool_result(
+                                    id.clone(),
+                                    call_id,
+                                    "tool call interrupted by user",
+                                );
+                                self.push_tool_result(&mut tool_results, result);
+
                                 if let Some(tx) = &self.debug_tx {
-                                    tx.send(DebugEvent::tool_result(&id, call_id.clone(), "tool call interrupted by user"));
                                     tx.send(DebugEvent::interrupted());
                                 }
-                                let interrupted_result = ToolResult {
-                                    id: id.clone(),
-                                    call_id,
-                                    content: OneOrMany::one(ToolResultContent::text("tool call interrupted by user")),
-                                };
-                                tool_results.push(interrupted_result);
+
+                                self.push_skipped_results(
+                                    &tool_calls[i + 1..],
+                                    &mut tool_results,
+                                    "tool call skipped because user interrupted a previous tool call",
+                                );
 
                                 self.chat_history.push(Message::User {
                                     #[allow(clippy::expect_used)]
@@ -288,45 +286,51 @@ where
                             result = tool_call.execute() => {
                                 match result {
                                     Ok(output) => {
-                                        if let Some(tx) = &self.debug_tx {
-                                            tx.send(DebugEvent::tool_result(&id, call_id.clone(), &output));
-                                        }
-                                        ToolResult {
-                                            id,
-                                            call_id,
-                                            content: OneOrMany::one(ToolResultContent::text(output)),
-                                        }
+                                        let result = make_tool_result(id, call_id, output);
+                                        self.push_tool_result(&mut tool_results, result);
                                     },
                                     Err(e) => {
                                         print_error(anyhow::anyhow!("{}", e));
-                                        let error_str = e.to_string();
-                                        if let Some(tx) = &self.debug_tx {
-                                            tx.send(DebugEvent::tool_result(&id, call_id.clone(), &error_str));
-                                        }
-                                        ToolResult {
-                                            id,
-                                            call_id,
-                                            content: OneOrMany::one(ToolResultContent::text(error_str)),
-                                        }
+                                        let result = make_tool_result(id, call_id, e.to_string());
+                                        self.push_tool_result(&mut tool_results, result);
                                     }
                                 }
                             }
-                        };
-                        tool_results.push(tool_result);
+                        }
                     }
                     ToolCallConfirmation::Reject => {
                         println!("{}", "conversation stopped".red());
+                        let result = make_tool_result(id, call_id, "user rejected tool call");
+                        self.push_tool_result(&mut tool_results, result);
+                        self.push_skipped_results(
+                            &tool_calls[i + 1..],
+                            &mut tool_results,
+                            "tool call skipped because user rejected a previous tool call",
+                        );
+                        self.chat_history.push(Message::User {
+                            #[allow(clippy::expect_used)]
+                            content: OneOrMany::many(
+                                tool_results
+                                    .into_iter()
+                                    .map(UserContent::ToolResult)
+                                    .collect::<Vec<_>>(),
+                            )
+                            .expect("tool results should've been added to chat history"),
+                        });
                         return;
                     }
                     ToolCallConfirmation::Feedback(text) => {
-                        tool_results.push(ToolResult {
+                        let result = make_tool_result(
                             id,
                             call_id,
-                            content: OneOrMany::one(ToolResultContent::text(format!(
-                                "user rejected tool call with feedback: {}",
-                                text
-                            ))),
-                        });
+                            format!("user rejected tool call with feedback: {text}"),
+                        );
+                        self.push_tool_result(&mut tool_results, result);
+                        self.push_skipped_results(
+                            &tool_calls[i + 1..],
+                            &mut tool_results,
+                            "tool call skipped because user provided feedback on a previous tool call",
+                        );
                         break;
                     }
                 }
@@ -452,8 +456,35 @@ where
             Err(_) => ToolCallConfirmation::Reject,
         }
     }
+
+    fn push_skipped_results(
+        &self,
+        remaining_tool_calls: &[ToolCall],
+        tool_results: &mut Vec<ToolResult>,
+        reason: &str,
+    ) {
+        for tc in remaining_tool_calls {
+            let result = make_tool_result(tc.id.clone(), tc.call_id.clone(), reason);
+            self.push_tool_result(tool_results, result);
+        }
+    }
+
+    fn push_tool_result(&self, tool_results: &mut Vec<ToolResult>, result: ToolResult) {
+        if let Some(tx) = &self.debug_tx {
+            tx.send(DebugEvent::tool_result(&result));
+        }
+        tool_results.push(result);
+    }
 }
 
 fn print_error(error: anyhow::Error) {
     println!("{}", format!("error: {:?}", error).red());
+}
+
+fn make_tool_result(id: String, call_id: Option<String>, text: impl Into<String>) -> ToolResult {
+    ToolResult {
+        id,
+        call_id,
+        content: OneOrMany::one(ToolResultContent::text(text)),
+    }
 }

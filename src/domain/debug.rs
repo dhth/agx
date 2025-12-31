@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use rig::message::{Message, Reasoning, ToolCall};
+use rig::message::{Message, Reasoning, ToolCall, ToolResult};
 use serde::Serialize;
 use tokio::sync::broadcast::{Receiver, Sender};
 
@@ -25,11 +25,7 @@ pub enum DebugEventPayload {
     Reasoning {
         reasoning: Reasoning,
     },
-    ToolResult {
-        id: String,
-        call_id: Option<String>,
-        content: String,
-    },
+    ToolResult(ToolResult),
     StreamComplete,
     TurnComplete {
         history: Vec<Message>,
@@ -58,16 +54,8 @@ impl DebugEvent {
         Self::new(DebugEventPayload::Reasoning { reasoning })
     }
 
-    pub fn tool_result(
-        id: impl Into<String>,
-        call_id: Option<String>,
-        content: impl Into<String>,
-    ) -> Self {
-        Self::new(DebugEventPayload::ToolResult {
-            id: id.into(),
-            call_id,
-            content: content.into(),
-        })
+    pub fn tool_result(result: &ToolResult) -> Self {
+        Self::new(DebugEventPayload::ToolResult(result.clone()))
     }
 
     pub fn stream_complete() -> Self {

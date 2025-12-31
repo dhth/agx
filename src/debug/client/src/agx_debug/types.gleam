@@ -57,17 +57,8 @@ pub type Message {
 
 pub type UserContent {
   UserText(text: String)
-  ToolResult(
-    id: String,
-    call_id: Option(String),
-    content: List(ToolResultContent),
-  )
+  ToolResult(id: String, call_id: Option(String), content: String)
   UnsupportedUserContent(raw: String)
-}
-
-pub type ToolResultContent {
-  ToolResultText(text: String)
-  UnsupportedToolResultContent(raw: String)
 }
 
 pub type AssistantContent {
@@ -161,7 +152,7 @@ fn tool_result_event_payload_decoder() -> Decoder(DebugEventPayload) {
     option.None,
     decode.optional(decode.string),
   )
-  use content <- decode.field("content", decode.string)
+  use content <- decode.field("content", raw_json_decoder())
   decode.success(ToolResultEvent(id:, call_id:, content:))
 }
 
@@ -244,24 +235,8 @@ fn tool_result_decoder() -> Decoder(UserContent) {
     option.None,
     decode.optional(decode.string),
   )
-  use content <- decode.field(
-    "content",
-    decode.list(tool_result_content_decoder()),
-  )
+  use content <- decode.field("content", raw_json_decoder())
   decode.success(ToolResult(id:, call_id:, content:))
-}
-
-fn tool_result_content_decoder() -> Decoder(ToolResultContent) {
-  use type_field <- decode.field("type", decode.string)
-  case type_field {
-    "text" -> tool_result_text_decoder()
-    _ -> raw_json_decoder() |> decode.map(UnsupportedToolResultContent)
-  }
-}
-
-fn tool_result_text_decoder() -> Decoder(ToolResultContent) {
-  use text <- decode.field("text", decode.string)
-  decode.success(ToolResultText(text: try_pretty_print(text)))
 }
 
 fn assistant_content_decoder() -> Decoder(AssistantContent) {
@@ -321,6 +296,3 @@ fn raw_json_decoder() -> Decoder(String) {
 
 @external(javascript, "./ffi/json.mjs", "stringify")
 fn stringify_dynamic(value: Dynamic) -> String
-
-@external(javascript, "./ffi/json.mjs", "tryPrettyPrint")
-fn try_pretty_print(value: String) -> String

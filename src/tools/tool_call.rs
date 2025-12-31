@@ -32,16 +32,12 @@ pub enum ToolExecutionError {
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("{0}")]
+#[error("couldn't get tool call details: {0}")]
 pub struct ToolCallDetailsError(String);
 
 impl ToolCallDetailsError {
     pub fn new(msg: impl Into<String>) -> Self {
         Self(msg.into())
-    }
-
-    pub fn message(&self) -> &str {
-        &self.0
     }
 }
 

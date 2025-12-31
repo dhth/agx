@@ -1,12 +1,11 @@
 import agx_debug/types.{
   type AssistantContent, type Controls, type DebugEvent, type DebugEventPayload,
   type Message, type Model, type Msg, type ReasoningData, type ToolCallData,
-  type ToolFunction, type ToolResultContent, type UserContent, AssistantMessage,
-  AssistantText, AssistantTextEvent, DebugEvent, Interrupted, LlmRequest,
-  NewSession, Reasoning, ReasoningData, ReasoningEvent, ScrollToEvent,
-  StreamComplete, ToggleScrollToNewEvent, ToolCall, ToolCallData, ToolCallEvent,
-  ToolFunction, ToolResult, ToolResultEvent, ToolResultText, TurnComplete,
-  UnsupportedAssistantContent, UnsupportedToolResultContent,
+  type ToolFunction, type UserContent, AssistantMessage, AssistantText,
+  AssistantTextEvent, DebugEvent, Interrupted, LlmRequest, NewSession, Reasoning,
+  ReasoningData, ReasoningEvent, ScrollToEvent, StreamComplete,
+  ToggleScrollToNewEvent, ToolCall, ToolCallData, ToolCallEvent, ToolFunction,
+  ToolResult, ToolResultEvent, TurnComplete, UnsupportedAssistantContent,
   UnsupportedUserContent, UserMessage, UserText,
 }
 import gleam/int
@@ -402,41 +401,18 @@ fn render_user_content(content: UserContent) -> element.Element(Msg) {
             element.text("tool_result: " <> id),
           ],
         ),
-        html.div(
-          [attribute.class("mt-1")],
-          list.map(inner, render_tool_result_content),
+        html.pre(
+          [
+            attribute.class(
+              "mt-1 text-xs bg-[#282828] p-1 rounded whitespace-pre-wrap break-all",
+            ),
+          ],
+          [
+            html.text(inner),
+          ],
         ),
       ])
     UnsupportedUserContent(raw:) ->
-      html.pre(
-        [
-          attribute.class(
-            "text-xs bg-[#282828] p-1 rounded whitespace-pre-wrap break-all",
-          ),
-        ],
-        [
-          html.text(raw),
-        ],
-      )
-  }
-}
-
-fn render_tool_result_content(
-  content: ToolResultContent,
-) -> element.Element(Msg) {
-  case content {
-    ToolResultText(text:) ->
-      html.pre(
-        [
-          attribute.class(
-            "text-xs bg-[#282828] p-1 rounded whitespace-pre-wrap break-all",
-          ),
-        ],
-        [
-          html.text(text),
-        ],
-      )
-    UnsupportedToolResultContent(raw:) ->
       html.pre(
         [
           attribute.class(
