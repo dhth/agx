@@ -30,7 +30,7 @@ console = "0.16.2"
 etcetera = "0.11.0"
 futures = "0.3.31"
 ignore = "0.4.25"
-reqwest = { version = "0.12.26", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.12.28", default-features = false, features = ["rustls-tls"] }
 rig-core = { version = "0.27.0", default-features = false, features = ["reqwest-rustls"] }
 rustyline = { version = "17.0.2", features = ["with-file-history"] }
 serde = { version = "1.0.228", features = ["derive"] }
