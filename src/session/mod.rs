@@ -68,13 +68,17 @@ where
             .join(Local::now().format("%Y-%m-%d-%H-%M-%S").to_string());
 
         let editor = DefaultEditor::new()?;
+        let approvals = Approvals {
+            fs_changes: false,
+            approved_cmds: config.approved_commands.clone(),
+        };
 
         Ok(Self {
             config,
             agent,
             project_context,
             editor,
-            approvals: Approvals::default(),
+            approvals,
             project_dir,
             project_log_dir,
             chats_dir,

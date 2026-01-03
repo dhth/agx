@@ -39,7 +39,7 @@ impl Display for CmdPattern {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct ApprovedCmds(HashSet<CmdPattern>);
 
 impl ApprovedCmds {

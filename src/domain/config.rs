@@ -3,5 +3,5 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Config {
-    approved_commands: ApprovedCmds,
+    pub approved_commands: ApprovedCmds,
 }
