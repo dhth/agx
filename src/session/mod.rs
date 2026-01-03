@@ -54,6 +54,7 @@ impl<M> Session<M>
 where
     M: CompletionModel + 'static,
 {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         config: Config,
         agent: Agent<M>,
