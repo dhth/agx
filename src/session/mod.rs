@@ -1,6 +1,6 @@
 mod hitl;
 
-use crate::domain::{DebugEvent, DebugEventSender, Provider};
+use crate::domain::{CmdPattern, DebugEvent, DebugEventSender, Provider};
 use crate::tools::AgxToolCall;
 use anyhow::Context;
 use chrono::{Local, Utc};
@@ -17,6 +17,7 @@ use rig::streaming::StreamedAssistantContent;
 use rustyline::DefaultEditor;
 use std::borrow::Cow;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 const BANNER: &str = include_str!("assets/logo.txt");
 const COMMANDS: &str = include_str!("assets/commands.txt");
@@ -467,14 +468,34 @@ where
             println!("{}", info);
         }
 
-        match self.editor.readline(
+        let approval_line = match tool_call {
+            AgxToolCall::CreateFile { .. } | AgxToolCall::EditFile { .. } => {
+                Some("to allow all edits in this session".to_string())
+            }
+            AgxToolCall::RunCmd { args } => {
+                if let Ok(cmd_pattern) = CmdPattern::from_str(&args.command) {
+                    Some(format!(
+                        r#"to always allow "{cmd_pattern}" commands in this directory"#,
+                    ))
+                } else {
+                    // TODO: this error shouldn't happen this deep in the call stack
+                    None
+                }
+            }
+            _ => None,
+        };
+
+        let confirmation_prompt = format!(
             "
 type:
 - y / <enter> to proceed
-- a           to auto approve this tool call from now onwards
+- a           {}
 - n / no      to reject
 - reject and provide feedback: ",
-        ) {
+            approval_line.unwrap_or("to always approve this tool call".to_string())
+        );
+
+        match self.editor.readline(&confirmation_prompt) {
             Ok(input) => {
                 let trimmed = input.trim();
                 match trimmed {
