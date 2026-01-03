@@ -1,6 +1,6 @@
 mod hitl;
 
-use crate::domain::{CmdPattern, DebugEvent, DebugEventSender, Provider};
+use crate::domain::{CmdPattern, Config, DebugEvent, DebugEventSender, Provider};
 use crate::tools::AgxToolCall;
 use anyhow::Context;
 use chrono::{Local, Utc};
@@ -34,6 +34,7 @@ pub struct Session<M>
 where
     M: CompletionModel + 'static,
 {
+    config: Config,
     agent: Agent<M>,
     project_context: Option<String>,
     editor: DefaultEditor,
@@ -53,6 +54,7 @@ where
     M: CompletionModel + 'static,
 {
     pub fn new(
+        config: Config,
         agent: Agent<M>,
         project_context: Option<String>,
         project_dir: PathBuf,
@@ -68,6 +70,7 @@ where
         let editor = DefaultEditor::new()?;
 
         Ok(Self {
+            config,
             agent,
             project_context,
             editor,

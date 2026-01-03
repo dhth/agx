@@ -25,7 +25,9 @@ pub async fn run() -> anyhow::Result<()> {
     let model_name = get_env_var("MODEL_NAME")?;
     let base_url = get_optional_env_var("BASE_URL")?;
 
-    let cwd = std::env::current_dir().context("couldnt' determine current working directory")?;
+    let config = crate::config::get_local_config().await?;
+
+    let cwd = std::env::current_dir().context("couldn't determine current working directory")?;
     let agx_log_dir = crate::telemetry::get_log_dir(&xdg);
     let project_log_dir = agx_log_dir.join("projects").join(path_to_dirname(&cwd));
 
@@ -80,6 +82,7 @@ pub async fn run() -> anyhow::Result<()> {
                 .build();
 
             let mut session = Session::new(
+                config,
                 agent,
                 project_context,
                 cwd,
@@ -108,6 +111,7 @@ pub async fn run() -> anyhow::Result<()> {
                 .build();
 
             let mut session = Session::new(
+                config,
                 agent,
                 project_context,
                 cwd,
@@ -137,6 +141,7 @@ pub async fn run() -> anyhow::Result<()> {
                 .build();
 
             let mut session = Session::new(
+                config,
                 agent,
                 project_context,
                 cwd,
@@ -180,6 +185,7 @@ pub async fn run() -> anyhow::Result<()> {
                 .build();
 
             let mut session = Session::new(
+                config,
                 agent,
                 project_context,
                 cwd,

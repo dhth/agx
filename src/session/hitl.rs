@@ -1,6 +1,5 @@
-use crate::domain::CmdPattern;
+use crate::domain::{ApprovedCmds, CmdPattern};
 use crate::tools::AgxToolCall;
-use std::collections::HashSet;
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -54,42 +53,5 @@ impl Display for Approvals {
 "#,
             self.fs_changes, self.approved_cmds
         )
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct ApprovedCmds(HashSet<CmdPattern>);
-
-impl ApprovedCmds {
-    pub fn is_approved(&self, cmd: &str) -> bool {
-        if let Ok(cmd_pattern) = CmdPattern::from_str(cmd)
-            && self.0.contains(&cmd_pattern)
-        {
-            true
-        } else {
-            // TODO: this error shouldn't happen this deep in the call stack
-            false
-        }
-    }
-
-    fn insert(&mut self, pattern: &CmdPattern) {
-        self.0.insert(pattern.clone());
-    }
-}
-
-impl Display for ApprovedCmds {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.0.is_empty() {
-            return write!(f, "none");
-        }
-
-        let lines = self
-            .0
-            .iter()
-            .map(|cmd| cmd.to_string())
-            .collect::<Vec<_>>()
-            .join("\n  - ");
-
-        write!(f, "\n  - {}", lines)
     }
 }
