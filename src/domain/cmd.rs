@@ -21,11 +21,7 @@ impl FromStr for CmdPattern {
 
         Ok(Self {
             binary: cmd[0].clone(),
-            first_arg: if cmd.len() > 1 {
-                Some(cmd[1].clone())
-            } else {
-                None
-            },
+            first_arg: cmd.get(1).cloned(),
         })
     }
 }

@@ -22,17 +22,11 @@ async fn get_config<P>(path: P) -> anyhow::Result<Config>
 where
     P: AsRef<Path>,
 {
-    let config = match tokio::fs::read(path).await {
-        Ok(bytes) => {
-            let config: Config =
-                serde_json::from_slice(bytes.as_slice()).context("couldn't parse file contents")?;
-            Ok(config)
-        }
+    match tokio::fs::read(path).await {
+        Ok(bytes) => serde_json::from_slice(&bytes).context("couldn't parse file contents"),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
         Err(e) => Err(e).context("couldn't read file"),
-    }?;
-
-    Ok(config)
+    }
 }
 
 pub async fn save_local_config(config: &Config) -> anyhow::Result<()> {
