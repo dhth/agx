@@ -78,12 +78,11 @@ docker-down:
     docker compose down
 
 all:
-    cargo check --all-targets
-    cargo fmt --all
-    cargo clippy --all-targets
-    cargo test
-    just debug-check
-    just debug-fmt
+    just check
+    just fmt
+    just lint
+    just test
+    just debug-all
 
 curl-events:
     curl -Ns http://127.0.0.1:4880/api/debug/events | tee ~/.local/state/agx/events.json
@@ -106,6 +105,11 @@ debug-run:
 [working-directory: 'src/debug/client']
 debug-fmt:
     gleam format src
+
+debug-all:
+    just debug-check
+    just debug-fmt
+    just debug-build
 
 # for AI agents
 tail-events:

@@ -474,9 +474,7 @@ where
             }
             AgxToolCall::RunCmd { args } => {
                 if let Ok(cmd_pattern) = CmdPattern::from_str(&args.command) {
-                    Some(format!(
-                        r#"to always allow "{cmd_pattern}" commands in this directory"#,
-                    ))
+                    Some(format!(r#"to always allow "{cmd_pattern}" commands"#,))
                 } else {
                     // TODO: this error shouldn't happen this deep in the call stack
                     None
