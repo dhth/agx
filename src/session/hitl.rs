@@ -4,13 +4,13 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 #[derive(Debug, Default)]
-pub struct Permissions {
+pub struct Approvals {
     pub create_file: ApprovalLevel,
     pub edit_file: ApprovalLevel,
     pub approved_cmds: ApprovedCmds,
 }
 
-impl Permissions {
+impl Approvals {
     pub fn save_approval_for_session(&mut self, tool_call: &AgxToolCall) -> Option<String> {
         match tool_call {
             AgxToolCall::CreateFile { .. } => {
@@ -37,11 +37,11 @@ impl Permissions {
     }
 }
 
-impl Display for Permissions {
+impl Display for Approvals {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            r#"permissions:
+            r#"approvals:
 - create files: {}
 - edit files: {}
 - approved commands: {}

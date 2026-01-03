@@ -6,7 +6,7 @@ use anyhow::Context;
 use chrono::{Local, Utc};
 use colored::Colorize;
 use futures::StreamExt;
-use hitl::{CmdPattern, Permissions};
+use hitl::{Approvals, CmdPattern};
 use rig::OneOrMany;
 use rig::agent::Agent;
 use rig::completion::{Completion, CompletionModel};
@@ -37,7 +37,7 @@ where
     agent: Agent<M>,
     project_context: Option<String>,
     editor: DefaultEditor,
-    permissions: Permissions,
+    approvals: Approvals,
     project_dir: PathBuf,
     project_log_dir: PathBuf,
     chats_dir: PathBuf,
@@ -71,7 +71,7 @@ where
             agent,
             project_context,
             editor,
-            permissions: Permissions::default(),
+            approvals: Approvals::default(),
             project_dir,
             project_log_dir,
             chats_dir,
@@ -158,13 +158,13 @@ where
                     _ = self.editor.clear_screen();
                     continue;
                 }
-                "/permissions" => {
-                    print!("{}", self.permissions.to_string().green());
+                "/approvals" => {
+                    print!("{}", self.approvals.to_string().green());
                     continue;
                 }
-                "/reset-permissions" => {
-                    self.permissions = Permissions::default();
-                    print!("{}", "permissions reset".green());
+                "/reset-approvals" => {
+                    self.approvals = Approvals::default();
+                    print!("{}", "approvals reset".green());
                     continue;
                 }
                 "/quit" | "/exit" | "bye" | ":q" => {
@@ -460,16 +460,16 @@ where
         }
 
         match tool_call {
-            AgxToolCall::CreateFile { .. } if self.permissions.create_file.is_approved() => {
+            AgxToolCall::CreateFile { .. } if self.approvals.create_file.is_approved() => {
                 return ToolCallConfirmation::AutoApproved;
             }
-            AgxToolCall::EditFile { .. } if self.permissions.edit_file.is_approved() => {
+            AgxToolCall::EditFile { .. } if self.approvals.edit_file.is_approved() => {
                 return ToolCallConfirmation::AutoApproved;
             }
             AgxToolCall::RunCmd { args } => {
                 // TODO: handle this error
                 if let Ok(cmd_pattern) = CmdPattern::from_str(&args.command)
-                    && self.permissions.approved_cmds.contains(&cmd_pattern)
+                    && self.approvals.approved_cmds.contains(&cmd_pattern)
                 {
                     return ToolCallConfirmation::AutoApproved;
                 }
@@ -499,7 +499,7 @@ where
                     "" | "y" => ToolCallConfirmation::Approved,
                     "a" => {
                         if let Some(confirmation_msg) =
-                            self.permissions.save_approval_for_session(tool_call)
+                            self.approvals.save_approval_for_session(tool_call)
                         {
                             println!("{}", confirmation_msg.yellow());
                         }
