@@ -2,4 +2,6 @@
    clear                                  clear screen
    /help                                  show help
    /new                                   start new session
+   /permissions                           show permissions for calling tools
+   /reset-permissions                     reset permissions for tool calls
    /quit | /exit | bye | :q               quit

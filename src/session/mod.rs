@@ -158,6 +158,15 @@ where
                     _ = self.editor.clear_screen();
                     continue;
                 }
+                "/permissions" => {
+                    print!("{}", self.permissions.to_string().green());
+                    continue;
+                }
+                "/reset-permissions" => {
+                    self.permissions = Permissions::default();
+                    print!("{}", "permissions reset".green());
+                    continue;
+                }
                 "/quit" | "/exit" | "bye" | ":q" => {
                     break;
                 }
@@ -460,9 +469,10 @@ where
             AgxToolCall::RunCmd { args } => {
                 // TODO: handle this error
                 if let Ok(cmd_pattern) = CmdPattern::from_str(&args.command)
-                    && self.permissions.run_cmd.contains(&cmd_pattern) {
-                        return ToolCallConfirmation::AutoApproved;
-                    }
+                    && self.permissions.approved_cmds.contains(&cmd_pattern)
+                {
+                    return ToolCallConfirmation::AutoApproved;
+                }
             }
             _ => {}
         }
@@ -481,14 +491,18 @@ where
 - y / <enter> to proceed
 - a           to auto approve this tool call from now onwards
 - n / no      to reject
-- or reject and provide feedback: ",
+- reject and provide feedback: ",
         ) {
             Ok(input) => {
                 let trimmed = input.trim();
                 match trimmed {
                     "" | "y" => ToolCallConfirmation::Approved,
                     "a" => {
-                        self.permissions.update_for_tool_call(tool_call);
+                        if let Some(confirmation_msg) =
+                            self.permissions.save_approval_for_session(tool_call)
+                        {
+                            println!("{}", confirmation_msg.yellow());
+                        }
                         ToolCallConfirmation::AutoApproved
                     }
                     "n" | "no" => ToolCallConfirmation::Rejected,
