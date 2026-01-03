@@ -3,5 +3,4 @@
    /help                                  show help
    /new                                   start new session
    /approvals                             show approvals for calling tools
-   /reset-approvals                       reset approvals for tool calls
    /quit | /exit | bye | :q               quit

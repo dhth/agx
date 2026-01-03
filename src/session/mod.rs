@@ -508,17 +508,19 @@ type:
                 match trimmed {
                     "" | "y" => ToolCallConfirmation::Approved,
                     "a" => {
+                        // TODO: this can be made nicer
                         if let Some(confirmation_msg) = self.approvals.save_approval(tool_call) {
-                            self.config.approved_commands =
-                                self.approvals.approved_commands.clone();
+                            if matches!(tool_call, AgxToolCall::RunCmd { .. }) {
+                                self.config.approved_commands =
+                                    self.approvals.approved_commands.clone();
+                                if let Err(e) = save_local_config(&self.config)
+                                    .await
+                                    .context("couldn't update agx's local config")
+                                {
+                                    print_error(e);
+                                }
+                            }
                             println!("{}", confirmation_msg.green());
-                        }
-
-                        if let Err(e) = save_local_config(&self.config)
-                            .await
-                            .context("couldn't update agx's local config")
-                        {
-                            print_error(e);
                         }
 
                         ToolCallConfirmation::AutoApproved
