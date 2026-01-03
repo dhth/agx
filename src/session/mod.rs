@@ -71,7 +71,7 @@ where
         let editor = DefaultEditor::new()?;
         let approvals = Approvals {
             fs_changes: false,
-            approved_cmds: config.approved_commands.clone(),
+            approved_commands: config.approved_commands.clone(),
         };
 
         Ok(Self {
@@ -508,12 +508,18 @@ type:
                     "" | "y" => ToolCallConfirmation::Approved,
                     "a" => {
                         if let Some(confirmation_msg) = self.approvals.save_approval(tool_call) {
-                            self.config.approved_commands = self.approvals.approved_cmds.clone();
-                            if let Err(e) = save_local_config(&self.config).await {
-                                print_error(e);
-                            }
+                            self.config.approved_commands =
+                                self.approvals.approved_commands.clone();
                             println!("{}", confirmation_msg.green());
                         }
+
+                        if let Err(e) = save_local_config(&self.config)
+                            .await
+                            .context("couldn't update agx's local config")
+                        {
+                            print_error(e);
+                        }
+
                         ToolCallConfirmation::AutoApproved
                     }
                     "n" | "no" => ToolCallConfirmation::Rejected,

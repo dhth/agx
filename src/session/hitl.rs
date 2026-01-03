@@ -6,14 +6,14 @@ use std::str::FromStr;
 #[derive(Debug, Default)]
 pub struct Approvals {
     pub fs_changes: bool,
-    pub approved_cmds: ApprovedCmds,
+    pub approved_commands: ApprovedCmds,
 }
 
 impl Approvals {
     pub fn is_tool_call_approved(&self, tool_call: &AgxToolCall) -> bool {
         match tool_call {
             AgxToolCall::CreateFile { .. } | AgxToolCall::EditFile { .. } => self.fs_changes,
-            AgxToolCall::RunCmd { args } => self.approved_cmds.is_approved(&args.command),
+            AgxToolCall::RunCmd { args } => self.approved_commands.is_approved(&args.command),
             _ => true,
         }
     }
@@ -29,7 +29,7 @@ impl Approvals {
             }
             AgxToolCall::RunCmd { args } => {
                 if let Ok(cmd_pattern) = CmdPattern::from_str(&args.command) {
-                    self.approved_cmds.insert(&cmd_pattern);
+                    self.approved_commands.insert(&cmd_pattern);
                     Some(format!(
                         r#"will not ask for confirmation for running "{cmd_pattern}" commands from now on"#,
                     ))
@@ -51,7 +51,7 @@ impl Display for Approvals {
 - create/edit files: {}
 - approved commands: {}
 "#,
-            self.fs_changes, self.approved_cmds
+            self.fs_changes, self.approved_commands
         )
     }
 }
