@@ -52,7 +52,7 @@ impl Display for Approvals {
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
-pub struct CmdPattern {
+struct CmdPattern {
     binary: String,
     first_arg: Option<String>,
 }
@@ -90,11 +90,18 @@ impl Display for CmdPattern {
 pub struct ApprovedCmds(HashSet<CmdPattern>);
 
 impl ApprovedCmds {
-    pub fn contains(&mut self, pattern: &CmdPattern) -> bool {
-        self.0.contains(pattern)
+    pub fn is_approved(&mut self, cmd: &str) -> bool {
+        if let Ok(cmd_pattern) = CmdPattern::from_str(cmd)
+            && self.0.contains(&cmd_pattern)
+        {
+            true
+        } else {
+            // TODO: this error shouldn't happen this deep in the call stack
+            false
+        }
     }
 
-    pub fn insert(&mut self, pattern: &CmdPattern) {
+    fn insert(&mut self, pattern: &CmdPattern) {
         self.0.insert(pattern.clone());
     }
 }

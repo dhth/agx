@@ -6,7 +6,7 @@ use anyhow::Context;
 use chrono::{Local, Utc};
 use colored::Colorize;
 use futures::StreamExt;
-use hitl::{Approvals, CmdPattern};
+use hitl::Approvals;
 use rig::OneOrMany;
 use rig::agent::Agent;
 use rig::completion::{Completion, CompletionModel};
@@ -17,7 +17,6 @@ use rig::streaming::StreamedAssistantContent;
 use rustyline::DefaultEditor;
 use std::borrow::Cow;
 use std::path::PathBuf;
-use std::str::FromStr;
 
 const BANNER: &str = include_str!("assets/logo.txt");
 const COMMANDS: &str = include_str!("assets/commands.txt");
@@ -468,9 +467,7 @@ where
             }
             AgxToolCall::RunCmd { args } => {
                 // TODO: handle this error
-                if let Ok(cmd_pattern) = CmdPattern::from_str(&args.command)
-                    && self.approvals.approved_cmds.contains(&cmd_pattern)
-                {
+                if self.approvals.approved_cmds.is_approved(&args.command) {
                     return ToolCallConfirmation::AutoApproved;
                 }
             }
