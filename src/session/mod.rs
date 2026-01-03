@@ -484,11 +484,13 @@ where
         }
 
         match self.editor.readline(
-            "type:
+            &"
+type:
 - y / <enter> to proceed
 - a           to auto approve this tool call from now onwards
 - n / no      to reject
-- reject and provide feedback: ",
+- reject and provide feedback: "
+                .yellow(),
         ) {
             Ok(input) => {
                 let trimmed = input.trim();
@@ -498,7 +500,7 @@ where
                         if let Some(confirmation_msg) =
                             self.approvals.save_approval_for_session(tool_call)
                         {
-                            println!("{}", confirmation_msg.yellow());
+                            println!("{}", confirmation_msg.green());
                         }
                         ToolCallConfirmation::AutoApproved
                     }
