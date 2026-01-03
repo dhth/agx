@@ -5,21 +5,27 @@ use std::str::FromStr;
 
 #[derive(Debug, Default)]
 pub struct Approvals {
-    pub create_file: ApprovalLevel,
-    pub edit_file: ApprovalLevel,
+    pub fs_changes: bool,
     pub approved_cmds: ApprovedCmds,
 }
 
 impl Approvals {
-    pub fn save_approval_for_session(&mut self, tool_call: &AgxToolCall) -> Option<String> {
+    pub fn is_tool_call_approved(&self, tool_call: &AgxToolCall) -> bool {
         match tool_call {
-            AgxToolCall::CreateFile { .. } => {
-                self.create_file = ApprovalLevel::ApprovedForSession;
-                Some("will not ask for confirmation for creating files from now on".to_string())
-            }
-            AgxToolCall::EditFile { .. } => {
-                self.edit_file = ApprovalLevel::ApprovedForSession;
-                Some("will not ask for confirmation for editing files from now on".to_string())
+            AgxToolCall::CreateFile { .. } | AgxToolCall::EditFile { .. } => self.fs_changes,
+            AgxToolCall::RunCmd { args } => self.approved_cmds.is_approved(&args.command),
+            _ => true,
+        }
+    }
+
+    pub fn save_approval(&mut self, tool_call: &AgxToolCall) -> Option<String> {
+        match tool_call {
+            AgxToolCall::CreateFile { .. } | AgxToolCall::EditFile { .. } => {
+                self.fs_changes = true;
+                Some(
+                    "will not ask for confirmation for creating/editing files from now on"
+                        .to_string(),
+                )
             }
             AgxToolCall::RunCmd { args } => {
                 if let Ok(cmd_pattern) = CmdPattern::from_str(&args.command) {
@@ -42,11 +48,10 @@ impl Display for Approvals {
         write!(
             f,
             r#"approvals:
-- create files: {}
-- edit files: {}
+- create/edit files: {}
 - approved commands: {}
 "#,
-            self.create_file, self.edit_file, self.approved_cmds
+            self.fs_changes, self.approved_cmds
         )
     }
 }
@@ -90,7 +95,7 @@ impl Display for CmdPattern {
 pub struct ApprovedCmds(HashSet<CmdPattern>);
 
 impl ApprovedCmds {
-    pub fn is_approved(&mut self, cmd: &str) -> bool {
+    pub fn is_approved(&self, cmd: &str) -> bool {
         if let Ok(cmd_pattern) = CmdPattern::from_str(cmd)
             && self.0.contains(&cmd_pattern)
         {
@@ -119,30 +124,6 @@ impl Display for ApprovedCmds {
             .collect::<Vec<_>>()
             .join("\n  - ");
 
-        write!(f, "{}", lines)
-    }
-}
-
-#[derive(Debug, Default, Clone)]
-pub enum ApprovalLevel {
-    #[default]
-    Ask,
-    ApprovedForSession,
-}
-
-impl Display for ApprovalLevel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let value = match self {
-            ApprovalLevel::Ask => "ask",
-            ApprovalLevel::ApprovedForSession => "approved for session",
-        };
-
-        write!(f, "{}", value)
-    }
-}
-
-impl ApprovalLevel {
-    pub fn is_approved(&self) -> bool {
-        matches!(&self, ApprovalLevel::ApprovedForSession)
+        write!(f, "\n  - {}", lines)
     }
 }

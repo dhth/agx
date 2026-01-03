@@ -161,11 +161,6 @@ where
                     print!("{}", self.approvals.to_string().green());
                     continue;
                 }
-                "/reset-approvals" => {
-                    self.approvals = Approvals::default();
-                    print!("{}", "approvals reset".green());
-                    continue;
-                }
                 "/quit" | "/exit" | "bye" | ":q" => {
                     break;
                 }
@@ -340,6 +335,7 @@ where
                         return;
                     }
                     ToolCallConfirmation::FeedbackProvided(text) => {
+                        println!("{}", "tool call rejected; providing feedback to LLM".red());
                         let result = make_tool_result(
                             id,
                             call_id,
@@ -458,20 +454,8 @@ where
             return ToolCallConfirmation::Approved;
         }
 
-        match tool_call {
-            AgxToolCall::CreateFile { .. } if self.approvals.create_file.is_approved() => {
-                return ToolCallConfirmation::AutoApproved;
-            }
-            AgxToolCall::EditFile { .. } if self.approvals.edit_file.is_approved() => {
-                return ToolCallConfirmation::AutoApproved;
-            }
-            AgxToolCall::RunCmd { args } => {
-                // TODO: handle this error
-                if self.approvals.approved_cmds.is_approved(&args.command) {
-                    return ToolCallConfirmation::AutoApproved;
-                }
-            }
-            _ => {}
+        if self.approvals.is_tool_call_approved(tool_call) {
+            return ToolCallConfirmation::AutoApproved;
         }
 
         println!(
@@ -484,22 +468,20 @@ where
         }
 
         match self.editor.readline(
-            &"
+            "
 type:
 - y / <enter> to proceed
 - a           to auto approve this tool call from now onwards
 - n / no      to reject
-- reject and provide feedback: "
-                .yellow(),
+- reject and provide feedback: ",
         ) {
             Ok(input) => {
                 let trimmed = input.trim();
                 match trimmed {
                     "" | "y" => ToolCallConfirmation::Approved,
                     "a" => {
-                        if let Some(confirmation_msg) =
-                            self.approvals.save_approval_for_session(tool_call)
-                        {
+                        if let Some(confirmation_msg) = self.approvals.save_approval(tool_call) {
+                            // TODO: save approvals to local fs
                             println!("{}", confirmation_msg.green());
                         }
                         ToolCallConfirmation::AutoApproved
