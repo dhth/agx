@@ -1,5 +1,6 @@
 mod hitl;
 
+use crate::config::save_local_config;
 use crate::domain::{CmdPattern, Config, DebugEvent, DebugEventSender, Provider};
 use crate::tools::AgxToolCall;
 use anyhow::Context;
@@ -266,7 +267,7 @@ where
                         }
                     };
 
-                    self.confirm_tool_call(&tool_call, details.as_deref())
+                    self.confirm_tool_call(&tool_call, details.as_deref()).await
                 } else {
                     ToolCallConfirmation::Approved
                 };
@@ -449,7 +450,7 @@ where
         Ok((response_text, tool_calls))
     }
 
-    fn confirm_tool_call(
+    async fn confirm_tool_call(
         &mut self,
         tool_call: &AgxToolCall,
         details: Option<&str>,
@@ -507,7 +508,10 @@ type:
                     "" | "y" => ToolCallConfirmation::Approved,
                     "a" => {
                         if let Some(confirmation_msg) = self.approvals.save_approval(tool_call) {
-                            // TODO: save approvals to local fs
+                            self.config.approved_commands = self.approvals.approved_cmds.clone();
+                            if let Err(e) = save_local_config(&self.config).await {
+                                print_error(e);
+                            }
                             println!("{}", confirmation_msg.green());
                         }
                         ToolCallConfirmation::AutoApproved
