@@ -13,10 +13,7 @@ use rig::providers::gemini::client::GeminiExt;
 use rig::providers::openai::OpenAICompletionsExt;
 use rig::providers::openrouter::client::OpenRouterExt;
 use rig::providers::{anthropic, gemini, openai, openrouter};
-use std::borrow::Cow;
 use std::str::FromStr;
-
-const SYSTEM_PROMPT: &str = include_str!("assets/system-prompt.txt");
 
 pub async fn run() -> anyhow::Result<()> {
     let xdg = etcetera::choose_base_strategy().context("couldn't determine your home directory")?;
@@ -32,17 +29,7 @@ pub async fn run() -> anyhow::Result<()> {
     let agx_log_dir = crate::telemetry::get_log_dir(&xdg);
     let project_log_dir = agx_log_dir.join("projects").join(path_to_dirname(&cwd));
 
-    let system_prompt = match get_project_context().await? {
-        Some(p) => Cow::Owned(format!(
-            "{}
-
-The following is context specific to this project:
-
-{}",
-            SYSTEM_PROMPT, p
-        )),
-        None => Cow::Borrowed(SYSTEM_PROMPT),
-    };
+    let project_context = get_project_context().await?;
 
     tokio::fs::create_dir_all(&project_log_dir)
         .await
@@ -84,7 +71,7 @@ The following is context specific to this project:
 
             let agent = client
                 .agent(&model_name)
-                .preamble(&system_prompt)
+                .without_preamble()
                 .tool(CreateFileTool)
                 .tool(EditFileTool)
                 .tool(ReadDirTool)
@@ -92,8 +79,15 @@ The following is context specific to this project:
                 .tool(RunCmdTool)
                 .build();
 
-            let mut session =
-                Session::new(agent, cwd, project_log_dir, provider, &model_name, debug_tx)?;
+            let mut session = Session::new(
+                agent,
+                project_context,
+                cwd,
+                project_log_dir,
+                provider,
+                &model_name,
+                debug_tx,
+            )?;
             session.run().await?;
         }
         Provider::Openrouter => {
@@ -105,7 +99,7 @@ The following is context specific to this project:
 
             let agent = client
                 .agent(&model_name)
-                .preamble(&system_prompt)
+                .without_preamble()
                 .tool(CreateFileTool)
                 .tool(EditFileTool)
                 .tool(ReadDirTool)
@@ -113,8 +107,15 @@ The following is context specific to this project:
                 .tool(RunCmdTool)
                 .build();
 
-            let mut session =
-                Session::new(agent, cwd, project_log_dir, provider, &model_name, debug_tx)?;
+            let mut session = Session::new(
+                agent,
+                project_context,
+                cwd,
+                project_log_dir,
+                provider,
+                &model_name,
+                debug_tx,
+            )?;
             session.run().await?;
         }
         Provider::Anthropic => {
@@ -126,7 +127,7 @@ The following is context specific to this project:
 
             let agent = client
                 .agent(&model_name)
-                .preamble(&system_prompt)
+                .without_preamble()
                 .max_tokens(50000)
                 .tool(CreateFileTool)
                 .tool(EditFileTool)
@@ -135,8 +136,15 @@ The following is context specific to this project:
                 .tool(RunCmdTool)
                 .build();
 
-            let mut session =
-                Session::new(agent, cwd, project_log_dir, provider, &model_name, debug_tx)?;
+            let mut session = Session::new(
+                agent,
+                project_context,
+                cwd,
+                project_log_dir,
+                provider,
+                &model_name,
+                debug_tx,
+            )?;
             session.run().await?;
         }
         Provider::GitHubCopilot => {
@@ -163,7 +171,7 @@ The following is context specific to this project:
 
             let agent = client
                 .agent(&model_name)
-                .preamble(&system_prompt)
+                .without_preamble()
                 .tool(CreateFileTool)
                 .tool(EditFileTool)
                 .tool(ReadDirTool)
@@ -171,8 +179,15 @@ The following is context specific to this project:
                 .tool(RunCmdTool)
                 .build();
 
-            let mut session =
-                Session::new(agent, cwd, project_log_dir, provider, &model_name, debug_tx)?;
+            let mut session = Session::new(
+                agent,
+                project_context,
+                cwd,
+                project_log_dir,
+                provider,
+                &model_name,
+                debug_tx,
+            )?;
             session.run().await?;
         }
     }

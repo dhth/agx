@@ -1,7 +1,7 @@
 use crate::domain::{DebugEvent, DebugEventSender, Provider};
 use crate::tools::AgxToolCall;
 use anyhow::Context;
-use chrono::Local;
+use chrono::{Local, Utc};
 use colored::Colorize;
 use futures::StreamExt;
 use rig::OneOrMany;
@@ -12,10 +12,12 @@ use rig::message::{
 };
 use rig::streaming::StreamedAssistantContent;
 use rustyline::DefaultEditor;
+use std::borrow::Cow;
 use std::path::PathBuf;
 
 const BANNER: &str = include_str!("assets/logo.txt");
 const COMMANDS: &str = include_str!("assets/commands.txt");
+const SYSTEM_PROMPT: &str = include_str!("assets/system-prompt.txt");
 
 enum ToolCallConfirmation {
     Proceed,
@@ -28,6 +30,7 @@ where
     M: CompletionModel + 'static,
 {
     agent: Agent<M>,
+    project_context: Option<String>,
     editor: DefaultEditor,
     project_dir: PathBuf,
     project_log_dir: PathBuf,
@@ -45,6 +48,7 @@ where
 {
     pub fn new(
         agent: Agent<M>,
+        project_context: Option<String>,
         project_dir: PathBuf,
         project_log_dir: PathBuf,
         provider: Provider,
@@ -59,6 +63,7 @@ where
 
         Ok(Self {
             agent,
+            project_context,
             editor,
             project_dir,
             project_log_dir,
@@ -361,7 +366,8 @@ where
             .agent
             .completion(prompt.clone(), self.chat_history.clone())
             .await
-            .context("couldn't build LLM request builder")?;
+            .context("couldn't build LLM request builder")?
+            .preamble(self.get_preamble());
 
         let mut stream = request_builder
             .stream()
@@ -474,6 +480,33 @@ where
             tx.send(DebugEvent::tool_result(&result));
         }
         tool_results.push(result);
+    }
+
+    fn get_preamble(&self) -> String {
+        let now = Utc::now().format("%A, %B %d, %Y %H:%M UTC").to_string();
+        let system_prompt = match &self.project_context {
+            Some(p) => Cow::Owned(format!(
+                "{}
+
+The following is context specific to this project:
+
+{}",
+                SYSTEM_PROMPT, p
+            )),
+            None => Cow::Borrowed(SYSTEM_PROMPT),
+        };
+        format!(
+            "{}
+
+---
+Extra information for you
+Current directory: {}
+Current date/time: {}
+",
+            system_prompt,
+            self.project_dir.to_string_lossy(),
+            now,
+        )
     }
 }
 
