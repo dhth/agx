@@ -10,7 +10,7 @@ use futures::StreamExt;
 use hitl::Approvals;
 use rig::OneOrMany;
 use rig::agent::Agent;
-use rig::completion::{Completion, CompletionModel};
+use rig::completion::{Completion, CompletionModel, GetTokenUsage};
 use rig::message::{
     AssistantContent, Message, ToolCall, ToolResult, ToolResultContent, UserContent,
 };
@@ -45,6 +45,7 @@ where
     chats_dir: PathBuf,
     provider: Provider,
     model_name: String,
+    tokens_in_context: u64,
     debug_tx: Option<DebugEventSender>,
     chat_history: Vec<Message>,
     print_newline_before_prompt: bool,
@@ -86,6 +87,7 @@ where
             chats_dir,
             provider,
             model_name: model_name.into(),
+            tokens_in_context: 0,
             debug_tx,
             chat_history: Vec::new(),
             print_newline_before_prompt: false,
@@ -113,13 +115,19 @@ where
         );
 
         let prompt_marker = "> ".bright_blue().to_string();
-        let metadata = format!(
-            "{}  {}",
-            format!("[{}/{}]", &self.provider, &self.model_name).yellow(),
-            self.project_dir.to_string_lossy().blue(),
-        );
-
         loop {
+            let token_info = if self.tokens_in_context > 0 {
+                Some(format!("  ~{} tokens", get_token_count_repr(self.tokens_in_context)).green())
+            } else {
+                None
+            };
+            let metadata = format!(
+                "{}  {}{}",
+                format!("[{}/{}]", &self.provider, &self.model_name).yellow(),
+                self.project_dir.to_string_lossy().blue(),
+                token_info.unwrap_or_default(),
+            );
+
             let prefix = if self.print_newline_before_prompt {
                 "\n"
             } else {
@@ -145,6 +153,7 @@ where
                 }
                 "/new" => {
                     self.chat_history.clear();
+                    self.tokens_in_context = 0;
                     self.print_newline_before_prompt = false;
                     self.chats_dir = self
                         .project_log_dir
@@ -430,7 +439,10 @@ where
                         }
                     }
                     StreamedAssistantContent::ReasoningDelta { .. } => {}
-                    StreamedAssistantContent::Final(_) => {
+                    StreamedAssistantContent::Final(r) => {
+                        if let Some(usage) = r.token_usage() {
+                            self.tokens_in_context = usage.total_tokens;
+                        }
                         if !response_text.is_empty()
                             && let Some(tx) = &self.debug_tx
                         {
@@ -589,5 +601,13 @@ fn make_tool_result(id: String, call_id: Option<String>, text: impl Into<String>
         id,
         call_id,
         content: OneOrMany::one(ToolResultContent::text(text)),
+    }
+}
+
+fn get_token_count_repr(count: u64) -> String {
+    if count >= 1_000 {
+        format!("{:.1}k", count as f64 / 1_000.0)
+    } else {
+        count.to_string()
     }
 }
