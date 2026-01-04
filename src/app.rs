@@ -64,64 +64,6 @@ pub async fn run() -> anyhow::Result<()> {
     };
 
     match provider {
-        Provider::Gemini => {
-            let mut builder = gemini::Client::builder().api_key(api_key);
-            if let Some(u) = base_url {
-                builder = builder.base_url(u);
-            }
-            let client: Client<GeminiExt> = builder.build().context("couldn't build client")?;
-
-            let agent = client
-                .agent(&model_name)
-                .without_preamble()
-                .tool(CreateFileTool)
-                .tool(EditFileTool)
-                .tool(ReadDirTool)
-                .tool(ReadFileTool)
-                .tool(RunCmdTool)
-                .build();
-
-            let mut session = Session::new(
-                config,
-                agent,
-                project_context,
-                cwd,
-                project_log_dir,
-                provider,
-                &model_name,
-                debug_tx,
-            )?;
-            session.run().await?;
-        }
-        Provider::Openrouter => {
-            let mut builder = openrouter::Client::builder().api_key(api_key);
-            if let Some(u) = base_url {
-                builder = builder.base_url(u);
-            }
-            let client: Client<OpenRouterExt> = builder.build().context("couldn't build client")?;
-
-            let agent = client
-                .agent(&model_name)
-                .without_preamble()
-                .tool(CreateFileTool)
-                .tool(EditFileTool)
-                .tool(ReadDirTool)
-                .tool(ReadFileTool)
-                .tool(RunCmdTool)
-                .build();
-
-            let mut session = Session::new(
-                config,
-                agent,
-                project_context,
-                cwd,
-                project_log_dir,
-                provider,
-                &model_name,
-                debug_tx,
-            )?;
-            session.run().await?;
-        }
         Provider::Anthropic => {
             let mut builder = anthropic::Client::builder().api_key(api_key);
             if let Some(u) = base_url {
@@ -132,7 +74,36 @@ pub async fn run() -> anyhow::Result<()> {
             let agent = client
                 .agent(&model_name)
                 .without_preamble()
-                .max_tokens(50000)
+                .max_tokens(200_000)
+                .tool(CreateFileTool)
+                .tool(EditFileTool)
+                .tool(ReadDirTool)
+                .tool(ReadFileTool)
+                .tool(RunCmdTool)
+                .build();
+
+            let mut session = Session::new(
+                config,
+                agent,
+                project_context,
+                cwd,
+                project_log_dir,
+                provider,
+                &model_name,
+                debug_tx,
+            )?;
+            session.run().await?;
+        }
+        Provider::Gemini => {
+            let mut builder = gemini::Client::builder().api_key(api_key);
+            if let Some(u) = base_url {
+                builder = builder.base_url(u);
+            }
+            let client: Client<GeminiExt> = builder.build().context("couldn't build client")?;
+
+            let agent = client
+                .agent(&model_name)
+                .without_preamble()
                 .tool(CreateFileTool)
                 .tool(EditFileTool)
                 .tool(ReadDirTool)
@@ -173,6 +144,67 @@ pub async fn run() -> anyhow::Result<()> {
                     .context("couldn't build client")?
                     .completions_api() // This is to maintain consistency with the other clients
             };
+
+            let agent = client
+                .agent(&model_name)
+                .without_preamble()
+                .tool(CreateFileTool)
+                .tool(EditFileTool)
+                .tool(ReadDirTool)
+                .tool(ReadFileTool)
+                .tool(RunCmdTool)
+                .build();
+
+            let mut session = Session::new(
+                config,
+                agent,
+                project_context,
+                cwd,
+                project_log_dir,
+                provider,
+                &model_name,
+                debug_tx,
+            )?;
+            session.run().await?;
+        }
+        Provider::OpenAI => {
+            let mut builder = openai::Client::builder().api_key(api_key);
+            if let Some(u) = base_url {
+                builder = builder.base_url(u);
+            }
+            let client: Client<OpenAICompletionsExt> = builder
+                .build()
+                .context("couldn't build client")?
+                .completions_api();
+
+            let agent = client
+                .agent(&model_name)
+                .without_preamble()
+                .tool(CreateFileTool)
+                .tool(EditFileTool)
+                .tool(ReadDirTool)
+                .tool(ReadFileTool)
+                .tool(RunCmdTool)
+                .build();
+
+            let mut session = Session::new(
+                config,
+                agent,
+                project_context,
+                cwd,
+                project_log_dir,
+                provider,
+                &model_name,
+                debug_tx,
+            )?;
+            session.run().await?;
+        }
+        Provider::Openrouter => {
+            let mut builder = openrouter::Client::builder().api_key(api_key);
+            if let Some(u) = base_url {
+                builder = builder.base_url(u);
+            }
+            let client: Client<OpenRouterExt> = builder.build().context("couldn't build client")?;
 
             let agent = client
                 .agent(&model_name)

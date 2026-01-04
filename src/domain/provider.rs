@@ -6,6 +6,7 @@ pub enum Provider {
     Anthropic,
     Gemini,
     GitHubCopilot,
+    OpenAI,
     Openrouter,
 }
 
@@ -17,9 +18,10 @@ impl FromStr for Provider {
             "anthropic" => Ok(Self::Anthropic),
             "gemini" => Ok(Self::Gemini),
             "github-copilot" => Ok(Self::GitHubCopilot),
+            "openai" => Ok(Self::OpenAI),
             "openrouter" => Ok(Self::Openrouter),
             _ => Err(
-                "invalid provider; allowed values: [anthropic, gemini, github-copilot, openrouter]",
+                "invalid provider; allowed values: [anthropic, gemini, github-copilot, openai, openrouter]",
             ),
         }
     }
@@ -31,6 +33,7 @@ impl Display for Provider {
             Provider::Anthropic => "anthropic",
             Provider::Gemini => "gemini",
             Provider::GitHubCopilot => "github-copilot",
+            Provider::OpenAI => "openai",
             Provider::Openrouter => "openrouter",
         };
 
