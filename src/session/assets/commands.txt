@@ -2,4 +2,5 @@
    clear                                  clear screen
    /help                                  show help
    /new                                   start new session
+   /approvals                             show approvals for calling tools
    /quit | /exit | bye | :q               quit

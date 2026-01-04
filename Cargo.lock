@@ -21,6 +21,7 @@ dependencies = [
  "rustyline",
  "serde",
  "serde_json",
+ "shlex",
  "similar",
  "thiserror",
  "tokio",

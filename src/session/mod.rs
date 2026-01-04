@@ -1,9 +1,13 @@
-use crate::domain::{DebugEvent, DebugEventSender, Provider};
+mod hitl;
+
+use crate::config::save_local_config;
+use crate::domain::{CmdPattern, Config, DebugEvent, DebugEventSender, Provider};
 use crate::tools::AgxToolCall;
 use anyhow::Context;
 use chrono::{Local, Utc};
 use colored::Colorize;
 use futures::StreamExt;
+use hitl::Approvals;
 use rig::OneOrMany;
 use rig::agent::Agent;
 use rig::completion::{Completion, CompletionModel};
@@ -14,24 +18,28 @@ use rig::streaming::StreamedAssistantContent;
 use rustyline::DefaultEditor;
 use std::borrow::Cow;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 const BANNER: &str = include_str!("assets/logo.txt");
 const COMMANDS: &str = include_str!("assets/commands.txt");
 const SYSTEM_PROMPT: &str = include_str!("assets/system-prompt.txt");
 
 enum ToolCallConfirmation {
-    Proceed,
-    Reject,
-    Feedback(String),
+    Approved,
+    AutoApproved,
+    Rejected,
+    FeedbackProvided(String),
 }
 
 pub struct Session<M>
 where
     M: CompletionModel + 'static,
 {
+    config: Config,
     agent: Agent<M>,
     project_context: Option<String>,
     editor: DefaultEditor,
+    approvals: Approvals,
     project_dir: PathBuf,
     project_log_dir: PathBuf,
     chats_dir: PathBuf,
@@ -46,7 +54,9 @@ impl<M> Session<M>
 where
     M: CompletionModel + 'static,
 {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
+        config: Config,
         agent: Agent<M>,
         project_context: Option<String>,
         project_dir: PathBuf,
@@ -60,11 +70,17 @@ where
             .join(Local::now().format("%Y-%m-%d-%H-%M-%S").to_string());
 
         let editor = DefaultEditor::new()?;
+        let approvals = Approvals {
+            fs_changes: false,
+            approved_commands: config.approved_commands.clone(),
+        };
 
         Ok(Self {
+            config,
             agent,
             project_context,
             editor,
+            approvals,
             project_dir,
             project_log_dir,
             chats_dir,
@@ -149,6 +165,10 @@ where
                     }
 
                     _ = self.editor.clear_screen();
+                    continue;
+                }
+                "/approvals" => {
+                    print!("{}", self.approvals.to_string().green());
                     continue;
                 }
                 "/quit" | "/exit" | "bye" | ":q" => {
@@ -248,13 +268,13 @@ where
                         }
                     };
 
-                    self.confirm_tool_call(&tool_call.repr(), details.as_deref())
+                    self.confirm_tool_call(&tool_call, details.as_deref()).await
                 } else {
-                    ToolCallConfirmation::Proceed
+                    ToolCallConfirmation::Approved
                 };
 
                 match confirmation {
-                    ToolCallConfirmation::Proceed => {
+                    ToolCallConfirmation::Approved | ToolCallConfirmation::AutoApproved => {
                         tokio::select! {
                             Ok(_) = tokio::signal::ctrl_c() => {
                                 println!("{}", "\ninterrupted".red());
@@ -303,7 +323,7 @@ where
                             }
                         }
                     }
-                    ToolCallConfirmation::Reject => {
+                    ToolCallConfirmation::Rejected => {
                         println!("{}", "conversation stopped".red());
                         let result = make_tool_result(id, call_id, "user rejected tool call");
                         self.push_tool_result(&mut tool_results, result);
@@ -324,7 +344,8 @@ where
                         });
                         return;
                     }
-                    ToolCallConfirmation::Feedback(text) => {
+                    ToolCallConfirmation::FeedbackProvided(text) => {
+                        println!("{}", "tool call rejected; providing feedback to LLM".red());
                         let result = make_tool_result(
                             id,
                             call_id,
@@ -430,36 +451,85 @@ where
         Ok((response_text, tool_calls))
     }
 
-    fn confirm_tool_call(&mut self, repr: &str, details: Option<&str>) -> ToolCallConfirmation {
+    async fn confirm_tool_call(
+        &mut self,
+        tool_call: &AgxToolCall,
+        details: Option<&str>,
+    ) -> ToolCallConfirmation {
         // TODO: temporary hack to skip HITL
         if std::env::var("AGX_SKIP_HITL")
             .map(|s| s == "1")
             .unwrap_or_default()
         {
-            return ToolCallConfirmation::Proceed;
+            return ToolCallConfirmation::Approved;
+        }
+
+        if self.approvals.is_tool_call_approved(tool_call) {
+            return ToolCallConfirmation::AutoApproved;
         }
 
         println!(
             "{}",
-            format!("[request for tool-call] {}", repr).bright_purple()
+            format!("[request for tool-call] {}", tool_call.repr()).bright_purple()
         );
 
         if let Some(info) = details {
             println!("{}", info);
         }
 
-        match self.editor.readline(
-            "press 'y'/<enter> to proceed, type 'n/no' to reject, or type your feedback: ",
-        ) {
+        let approval_line = match tool_call {
+            AgxToolCall::CreateFile { .. } | AgxToolCall::EditFile { .. } => {
+                Some("to allow all edits in this session".to_string())
+            }
+            AgxToolCall::RunCmd { args } => {
+                if let Ok(cmd_pattern) = CmdPattern::from_str(&args.command) {
+                    Some(format!(r#"to always allow "{cmd_pattern}" commands"#,))
+                } else {
+                    // TODO: this error shouldn't happen this deep in the call stack
+                    None
+                }
+            }
+            _ => None,
+        };
+
+        let confirmation_prompt = format!(
+            "
+type:
+- y / <enter> to proceed
+- a           {}
+- n / no      to reject
+- reject and provide feedback: ",
+            approval_line.unwrap_or("to always approve this tool call".to_string())
+        );
+
+        match self.editor.readline(&confirmation_prompt) {
             Ok(input) => {
                 let trimmed = input.trim();
                 match trimmed {
-                    "" | "y" => ToolCallConfirmation::Proceed,
-                    "n" | "no" => ToolCallConfirmation::Reject,
-                    feedback => ToolCallConfirmation::Feedback(feedback.to_string()),
+                    "" | "y" => ToolCallConfirmation::Approved,
+                    "a" => {
+                        // TODO: this can be made nicer
+                        if let Some(confirmation_msg) = self.approvals.save_approval(tool_call) {
+                            if matches!(tool_call, AgxToolCall::RunCmd { .. }) {
+                                self.config.approved_commands =
+                                    self.approvals.approved_commands.clone();
+                                if let Err(e) = save_local_config(&self.config)
+                                    .await
+                                    .context("couldn't update agx's local config")
+                                {
+                                    print_error(e);
+                                }
+                            }
+                            println!("{}", confirmation_msg.green());
+                        }
+
+                        ToolCallConfirmation::AutoApproved
+                    }
+                    "n" | "no" => ToolCallConfirmation::Rejected,
+                    feedback => ToolCallConfirmation::FeedbackProvided(feedback.to_string()),
                 }
             }
-            Err(_) => ToolCallConfirmation::Reject,
+            Err(_) => ToolCallConfirmation::Rejected,
         }
     }
 
