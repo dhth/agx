@@ -4,32 +4,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::{Level, instrument};
 
-const BLOCKED_CMD_PATTERNS: [&str; 23] = [
-    "rm -rf",
-    "sudo",
-    "curl",
-    "wget",
-    "dd if=",
-    "mkfs",
-    "fdisk",
-    "format",
-    "deltree",
-    "rmdir /s",
-    "nc",
-    "netcat",
-    "telnet",
-    "ssh-keygen",
-    "passwd",
-    "useradd",
-    "userdel",
-    "chmod 777",
-    "chown root",
-    "python -c",
-    "perl -e",
-    "ruby -e",
-    "node -e",
-];
-
 #[derive(Debug, Deserialize)]
 pub struct RunCmdArgs {
     pub command: String,
@@ -45,8 +19,6 @@ impl std::fmt::Display for RunCmdArgs {
 pub enum RunCmdError {
     #[error("command is empty")]
     CmdIsEmpty,
-    #[error("command contains a forbidden pattern: {0}")]
-    CmdContainsForbiddenPattern(String),
     #[error("couldn't run command: {0}")]
     CouldntRunCmd(#[from] std::io::Error),
 }
@@ -70,7 +42,7 @@ impl Tool for RunCmdTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Run a shell command via the system shell. Returns the command’s success flag, exit status code (if available), stdout, and stderr".to_string(),
+            description: "Run a shell command via bash. Returns the command’s success flag, exit status code (if available), stdout, and stderr".to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -90,21 +62,10 @@ impl Tool for RunCmdTool {
             return Err(RunCmdError::CmdIsEmpty);
         }
 
-        let cmd = &args.command;
-
-        // TODO: this is quite naive, improve this
-        for pattern in BLOCKED_CMD_PATTERNS {
-            if cmd.contains(pattern) {
-                return Err(RunCmdError::CmdContainsForbiddenPattern(
-                    pattern.to_string(),
-                ));
-            }
-        }
-
         // TODO: make it cross-platform, have fallback if bash unavailable
         // TODO: add timeout
         let output = tokio::process::Command::new("bash")
-            .args(["-c", cmd])
+            .args(["-c", &args.command])
             .output()
             .await?;
 
@@ -224,27 +185,5 @@ mod tests {
 
         // THEN
         assert_debug_snapshot!(result, @"CmdIsEmpty");
-    }
-
-    #[tokio::test]
-    async fn command_with_blocked_pattern_is_rejected() {
-        // GIVEN
-        let tool = RunCmdTool;
-        let args = RunCmdArgs {
-            command: "curl http://127.0.0.1:9999".to_string(),
-        };
-
-        // WHEN
-        let result = tool
-            .call(args)
-            .await
-            .expect_err("result should've been an error");
-
-        // THEN
-        assert_debug_snapshot!(result, @r#"
-        CmdContainsForbiddenPattern(
-            "curl",
-        )
-        "#);
     }
 }
