@@ -34,7 +34,7 @@ pub async fn save_local_config(config: &Config) -> anyhow::Result<()> {
         serde_json::to_string_pretty(config).context("couldn't serialize config to JSON")?;
 
     let config_file_path = PathBuf::from(AGX_DIR).join(LOCAL_CONFIG_FILE);
-    save_config(AGX_DIR, &config_file_path, &contents)
+    save_config(&config_file_path, &contents)
         .await
         .with_context(|| {
             format!(
@@ -46,15 +46,17 @@ pub async fn save_local_config(config: &Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn save_config<P>(dir: &str, file_path: P, contents: &str) -> anyhow::Result<()>
+async fn save_config<P>(path: P, contents: &str) -> anyhow::Result<()>
 where
     P: AsRef<Path>,
 {
-    tokio::fs::create_dir_all(dir)
-        .await
-        .context("couldn't create directory")?;
+    if let Some(parent) = path.as_ref().parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .context("couldn't create directory")?;
+    }
 
-    tokio::fs::write(file_path, contents)
+    tokio::fs::write(path, contents)
         .await
         .context("couldn't write contents to file")?;
 

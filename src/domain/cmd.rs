@@ -40,13 +40,9 @@ pub struct ApprovedCmds(HashSet<CmdPattern>);
 
 impl ApprovedCmds {
     pub fn is_approved(&self, cmd: &str) -> bool {
-        if let Ok(cmd_pattern) = CmdPattern::from_str(cmd)
-            && self.0.contains(&cmd_pattern)
-        {
-            true
-        } else {
-            false
-        }
+        CmdPattern::from_str(cmd)
+            .map(|p| self.0.contains(&p))
+            .unwrap_or(false)
     }
 
     pub fn insert(&mut self, pattern: &CmdPattern) {
