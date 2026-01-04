@@ -82,7 +82,6 @@ all:
     just fmt
     just lint
     just test
-    just debug-all
 
 curl-events:
     curl -Ns http://127.0.0.1:4880/api/debug/events | tee ~/.local/state/agx/events.json
