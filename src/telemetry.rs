@@ -1,3 +1,4 @@
+use crate::env::get_optional_env_var;
 use anyhow::Context;
 use etcetera::BaseStrategy;
 use etcetera::base_strategy::Xdg;
@@ -9,35 +10,47 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 const LOG_ENV_VAR: &str = "AGX_LOG";
+const OTEL_ENV_VAR: &str = "AGX_OTEL";
 
 pub struct TelemetryGuard {
     tracer_provider: Option<SdkTracerProvider>,
 }
 
-impl TelemetryGuard {
-    pub fn shutdown(self) {
-        if let Some(provider) = self.tracer_provider
-            && let Err(err) = provider.shutdown()
-        {
-            tracing::error!(?err, "couldn't shut down otel tracer");
+impl Drop for TelemetryGuard {
+    fn drop(&mut self) {
+        if let Some(provider) = &self.tracer_provider {
+            let _ = provider.shutdown();
         }
     }
 }
 
-pub fn setup(xdg: &Xdg, otel: bool) -> anyhow::Result<TelemetryGuard> {
-    if std::env::var(LOG_ENV_VAR).map_or(true, |v| v.is_empty()) {
-        return Ok(TelemetryGuard {
-            tracer_provider: None,
-        });
-    }
+pub fn setup(xdg: &Xdg) -> anyhow::Result<TelemetryGuard> {
+    let log = get_optional_env_var(LOG_ENV_VAR)?.is_some_and(|v| !v.is_empty());
 
-    let log_file_path = get_log_file_path(xdg).context("couldn't determine log file path")?;
+    let (filter_layer, json_layer) = if log {
+        let filter_layer = EnvFilter::from_env(LOG_ENV_VAR);
+        let log_file_path = get_log_file_path(xdg).context("couldn't determine log file path")?;
 
-    let log_file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_file_path)
-        .context("couldn't open log file")?;
+        let log_file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_file_path)
+            .context("couldn't open log file")?;
+        (
+            Some(filter_layer),
+            Some(
+                tracing_subscriber::fmt::layer()
+                    .json()
+                    .with_current_span(true)
+                    .with_span_list(false)
+                    .with_writer(log_file),
+            ),
+        )
+    } else {
+        (None, None)
+    };
+
+    let otel = get_optional_env_var(OTEL_ENV_VAR)?.is_some_and(|v| v == "1");
 
     let (tracer_provider, trace_layer) = if otel {
         let tracer_provider = init_tracer_provider()?;
@@ -50,14 +63,6 @@ pub fn setup(xdg: &Xdg, otel: bool) -> anyhow::Result<TelemetryGuard> {
     } else {
         (None, None)
     };
-
-    let filter_layer = EnvFilter::from_env(LOG_ENV_VAR);
-
-    let json_layer = tracing_subscriber::fmt::layer()
-        .json()
-        .with_current_span(true)
-        .with_span_list(false)
-        .with_writer(log_file);
 
     tracing_subscriber::registry()
         .with(filter_layer)

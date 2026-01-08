@@ -2,7 +2,7 @@ use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tracing::{Level, instrument, trace};
+use tracing::{instrument, trace};
 
 #[derive(Debug, Deserialize)]
 pub struct ReadFileArgs {
@@ -41,7 +41,7 @@ impl Tool for ReadFileTool {
         }
     }
 
-    #[instrument(level = Level::TRACE, name = "tool-call: read_file", err(level = Level::ERROR), skip(self))]
+    #[instrument(name = "tool-call: read_file", skip(self), err)]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         let contents = tokio::fs::read_to_string(&args.path).await?;
 

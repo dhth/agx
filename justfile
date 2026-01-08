@@ -77,6 +77,14 @@ docker-shell:
 docker-down:
     docker compose down
 
+[working-directory('local')]
+lgtm-docker-up:
+    docker compose -f docker-compose.lgtm.yml up -d
+
+[working-directory('local')]
+lgtm-docker-down:
+    docker compose -f docker-compose.lgtm.yml down
+
 all:
     just check
     just fmt

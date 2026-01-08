@@ -4,7 +4,7 @@ use rig::tool::Tool;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::path::PathBuf;
-use tracing::{Level, instrument};
+use tracing::instrument;
 
 #[derive(Debug, Deserialize)]
 pub struct EditFileArgs {
@@ -81,7 +81,7 @@ impl Tool for EditFileTool {
         }
     }
 
-    #[instrument(level = Level::TRACE, name = "tool-call: edit_file", ret, err(level = Level::ERROR), skip(self))]
+    #[instrument(name = "tool-call: edit_file", skip(self), err)]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         let path = PathBuf::from(&args.path);
         let (_, new_contents) = Self::validate_and_read(&args).await?;

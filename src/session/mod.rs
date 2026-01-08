@@ -1,7 +1,7 @@
 mod hitl;
 
 use crate::config::save_local_config;
-use crate::domain::{CmdPattern, Config, DebugEvent, DebugEventSender, Provider};
+use crate::domain::{CmdPattern, Config, DebugEvent, DebugEventSender, MessageExt, Provider};
 use crate::tools::AgxToolCall;
 use anyhow::Context;
 use chrono::{Local, Utc};
@@ -19,6 +19,7 @@ use rustyline::DefaultEditor;
 use std::borrow::Cow;
 use std::path::PathBuf;
 use std::str::FromStr;
+use tracing::instrument;
 
 const BANNER: &str = include_str!("assets/logo.txt");
 const COMMANDS: &str = include_str!("assets/commands.txt");
@@ -199,6 +200,7 @@ where
         Ok(())
     }
 
+    #[instrument(skip(self))]
     async fn handle_prompt(&mut self, prompt: &str) {
         let mut prompt = Message::user(prompt);
 
@@ -388,6 +390,7 @@ where
         }
     }
 
+    #[instrument(skip(self), fields(prompt = prompt.summary()) err)]
     async fn stream_llm_response(
         &mut self,
         prompt: Message,

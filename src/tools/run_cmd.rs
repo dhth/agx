@@ -2,7 +2,7 @@ use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tracing::{Level, instrument};
+use tracing::instrument;
 
 #[derive(Debug, Deserialize)]
 pub struct RunCmdArgs {
@@ -56,7 +56,7 @@ impl Tool for RunCmdTool {
         }
     }
 
-    #[instrument(level = Level::TRACE, name = "tool-call: run_cmd", ret, err(level = Level::ERROR), skip(self))]
+    #[instrument(name = "tool-call: run_cmd", skip(self), err)]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         if args.command.trim().is_empty() {
             return Err(RunCmdError::CmdIsEmpty);
