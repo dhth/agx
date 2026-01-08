@@ -17,7 +17,8 @@ use std::str::FromStr;
 
 pub async fn run() -> anyhow::Result<()> {
     let xdg = etcetera::choose_base_strategy().context("couldn't determine your home directory")?;
-    crate::telemetry::setup(&xdg).context("couldn't set up logging")?;
+    let telemetry_guard =
+        crate::telemetry::setup(&xdg, false).context("couldn't set up logging")?;
 
     let provider =
         Provider::from_str(get_env_var("PROVIDER")?.as_str()).map_err(|e| anyhow::anyhow!(e))?;
@@ -229,6 +230,8 @@ pub async fn run() -> anyhow::Result<()> {
             session.run().await?;
         }
     }
+
+    telemetry_guard.shutdown();
 
     Ok(())
 }
