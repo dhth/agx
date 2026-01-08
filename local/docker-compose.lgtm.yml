@@ -1,0 +1,13 @@
+services:
+  lgtm:
+    image: docker.io/grafana/otel-lgtm:latest
+    ports:
+      - "3000:3000" # Grafana
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+    environment:
+      - GF_PATHS_DATA=/data/grafana
+    volumes:
+      - ./container/grafana:/data/grafana
+      - ./container/prometheus:/data/prometheus
+      - ./container/loki:/data/loki

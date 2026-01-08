@@ -4,7 +4,7 @@ use rig::tool::Tool;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::path::PathBuf;
-use tracing::{Level, instrument};
+use tracing::instrument;
 
 #[derive(Debug, Deserialize)]
 pub struct CreateFileArgs {
@@ -77,7 +77,7 @@ impl Tool for CreateFileTool {
         }
     }
 
-    #[instrument(level = Level::TRACE, name = "tool-call: create_file", ret, err(level = Level::ERROR), skip(self))]
+    #[instrument(name = "tool-call: create_file", skip(self), err)]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         if args.path.is_empty() {
             // TODO: encode this in the type system

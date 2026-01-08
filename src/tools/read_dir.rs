@@ -2,7 +2,7 @@ use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tracing::{Level, instrument};
+use tracing::instrument;
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -70,7 +70,7 @@ impl Tool for ReadDirTool {
         }
     }
 
-    #[instrument(level = Level::TRACE, name = "tool-call: read_dir", ret, err(level = Level::ERROR), skip(self))]
+    #[instrument(name = "tool-call: read_dir", skip(self), err)]
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         let metadata = tokio::fs::metadata(&args.path).await?;
         if !metadata.is_dir() {
