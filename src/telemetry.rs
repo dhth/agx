@@ -3,6 +3,7 @@ use anyhow::Context;
 use etcetera::BaseStrategy;
 use etcetera::base_strategy::Xdg;
 use opentelemetry::trace::TracerProvider;
+use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use std::path::PathBuf;
 use tracing_subscriber::EnvFilter;
@@ -102,7 +103,10 @@ fn init_tracer_provider() -> anyhow::Result<SdkTracerProvider> {
         .build()
         .context("couldn't build OTEL span exporter")?;
 
+    let resource = Resource::builder().with_service_name("agx").build();
+
     Ok(SdkTracerProvider::builder()
+        .with_resource(resource)
         .with_batch_exporter(exporter)
         .build())
 }
