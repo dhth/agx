@@ -57,14 +57,18 @@ pub fn setup(xdg: &Xdg) -> anyhow::Result<TelemetryGuard> {
 
         (
             Some(tracer_provider),
-            Some(tracing_opentelemetry::layer().with_tracer(tracer)),
+            Some(
+                tracing_opentelemetry::layer()
+                    .with_tracer(tracer)
+                    .with_filter(LevelFilter::INFO),
+            ),
         )
     } else {
         (None, None)
     };
 
     tracing_subscriber::registry()
-        .with(trace_layer.with_filter(LevelFilter::INFO))
+        .with(trace_layer)
         .with(json_layer)
         .init();
 
