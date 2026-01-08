@@ -6,9 +6,10 @@ use opentelemetry::trace::TracerProvider;
 use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use std::path::PathBuf;
-use tracing_subscriber::EnvFilter;
+use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Layer};
 
 const LOG_ENV_VAR: &str = "AGX_LOG";
 const OTEL_ENV_VAR: &str = "AGX_OTEL";
@@ -28,8 +29,7 @@ impl Drop for TelemetryGuard {
 pub fn setup(xdg: &Xdg) -> anyhow::Result<TelemetryGuard> {
     let log = get_optional_env_var(LOG_ENV_VAR)?.is_some_and(|v| !v.is_empty());
 
-    let (filter_layer, json_layer) = if log {
-        let filter_layer = EnvFilter::from_env(LOG_ENV_VAR);
+    let json_layer = if log {
         let log_file_path = get_log_file_path(xdg).context("couldn't determine log file path")?;
 
         let log_file = std::fs::OpenOptions::new()
@@ -37,18 +37,16 @@ pub fn setup(xdg: &Xdg) -> anyhow::Result<TelemetryGuard> {
             .append(true)
             .open(&log_file_path)
             .context("couldn't open log file")?;
-        (
-            Some(filter_layer),
-            Some(
-                tracing_subscriber::fmt::layer()
-                    .json()
-                    .with_current_span(true)
-                    .with_span_list(false)
-                    .with_writer(log_file),
-            ),
+        Some(
+            tracing_subscriber::fmt::layer()
+                .json()
+                .with_current_span(true)
+                .with_span_list(false)
+                .with_writer(log_file)
+                .with_filter(EnvFilter::from_env(LOG_ENV_VAR)),
         )
     } else {
-        (None, None)
+        None
     };
 
     let otel = get_optional_env_var(OTEL_ENV_VAR)?.is_some_and(|v| v == "1");
@@ -66,8 +64,7 @@ pub fn setup(xdg: &Xdg) -> anyhow::Result<TelemetryGuard> {
     };
 
     tracing_subscriber::registry()
-        .with(filter_layer)
-        .with(trace_layer)
+        .with(trace_layer.with_filter(LevelFilter::INFO))
         .with(json_layer)
         .init();
 
